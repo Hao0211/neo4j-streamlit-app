@@ -104,6 +104,16 @@ if uploaded_file:
         (filtered_df['created_at'] <= pd.to_datetime(date_range[1]))
     ]
 
+    # Aggregation for tooltip enhancement
+    spend_summary = df[(df['type'] == 'Out') & (df['target_type'] == 'rewardslink_payment_gateway')] \
+        .groupby('packages_title')['ori_amount'].sum().to_dict()
+
+    transfer_summary = df[(df['type'] == 'Out') & (df['target_type'].isin(['user', 'egg']))] \
+        .groupby('target_id')['reward_points'].sum().to_dict()
+
+    received_summary = df[df['type'] == 'In'] \
+        .groupby('title')['reward_points'].sum().to_dict()
+
     # Graph visualization
     st.subheader("Graph Visualization")
     net = Network(height="800px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
@@ -118,25 +128,28 @@ if uploaded_file:
         if row['type'] == 'Out' and row['target_type'] in ['user', 'egg'] and "TRANSFER" in selected_rels:
             receiver_row = df[df['id'] == row['target_id']]
             receiver = receiver_row['username'].values[0] if not receiver_row.empty else str(row['target_id'])
+            total_transfer = transfer_summary.get(row['target_id'], row['reward_points'])
             receiver_title = f"Username: {receiver}<br>User ID: {row['target_id']}"
             receiver_url = f"https://yourdomain.com/user/{row['target_id']}"
-            edge_title = f"TRANSFER<br>Points: {row['reward_points']}<br>Created At: {row['created_at']}"
+            edge_title = f"TRANSFER<br>Points: {row['reward_points']}<br>Total TRANSFER: {total_transfer}<br>Created At: {row['created_at']}"
             net.add_node(receiver, label=receiver, shape='ellipse', color='#E0FFFF', title=receiver_title, url=receiver_url)
             net.add_edge(sender, receiver, label=f'TRANSFER ({row["reward_points"]})', color='#AAAAAA', title=edge_title)
 
         elif row['type'] == 'Out' and row['target_type'] == 'rewardslink_payment_gateway' and "SPEND" in selected_rels:
             tid = f"Target:{row['target_id']}"
-            target_title = f"Target: {row['packages_title']}<br>Amount: {row['ori_amount']} {row['ori_currency']}<br>Created At: {row['created_at']}"
+            total_spend = spend_summary.get(row['packages_title'], row['ori_amount'])
+            target_title = f"Target: {row['packages_title']}<br>Total SPEND: {total_spend} {row['ori_currency']}"
             target_url = f"https://yourdomain.com/target/{row['target_id']}"
-            edge_title = f"SPEND<br>Amount: {row['ori_amount']} {row['ori_currency']}<br>Created At: {row['created_at']}"
+            edge_title = f"SPEND<br>Amount: {row['ori_amount']} {row['ori_currency']}<br>Total SPEND: {total_spend}<br>Created At: {row['created_at']}"
             net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1', title=target_title, url=target_url)
             net.add_edge(sender, tid, label=f'SPEND ({row["ori_amount"]})', color='#AAAAAA', title=edge_title)
 
         elif row['type'] == 'In' and "RECEIVED" in selected_rels:
             sid = f"Source:{row['target_id']}"
-            source_title = f"Source: {row['title']}<br>Points: {row['reward_points']}<br>Created At: {row['created_at']}"
+            total_received = received_summary.get(row['title'], row['reward_points'])
+            source_title = f"Source: {row['title']}<br>Total RECEIVED: {total_received}"
             source_url = f"https://yourdomain.com/source/{row['target_id']}"
-            edge_title = f"RECEIVED<br>Points: {row['reward_points']}<br>Created At: {row['created_at']}"
+            edge_title = f"RECEIVED<br>Points: {row['reward_points']}<br>Total RECEIVED: {total_received}<br>Created At: {row['created_at']}"
             net.add_node(sid, label=row['title'], shape='box', color='#F0FFF0', title=source_title, url=source_url)
             net.add_edge(sid, sender, label=f'RECEIVED ({row["reward_points"]})', color='#AAAAAA', title=edge_title)
 
