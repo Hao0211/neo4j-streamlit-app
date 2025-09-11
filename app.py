@@ -12,9 +12,15 @@ NEO4J_USERNAME = "neo4j"
 NEO4J_PASSWORD = "VZzJzRBADaHoeLuwJsib9fDY5BbxUW0xCakjjkFJCIk"
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
-# 假设你已经加载了 CSV 文件并创建了 df
-st.success("CSV file loaded successfully.")
-st.dataframe(df.head())
+# CSV 上传
+uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file, parse_dates=["created_at", "updated_at"])
+    st.success("CSV file loaded successfully.")
+    st.dataframe(df.head())
+else:
+    st.warning("Please upload a CSV file to proceed.")
+    st.stop()
 
 # Neo4j 导入函数
 def import_to_neo4j(tx, row):
