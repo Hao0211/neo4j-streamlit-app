@@ -103,55 +103,40 @@ filtered_df = filtered_df[
     (filtered_df['created_at'] <= pd.to_datetime(date_range[1]))
 ]
 
-# Aggregation for tooltip enhancement
-spend_summary = df[(df['type'] == 'Out') & (df['target_type'] == 'rewardslink_payment_gateway')] \
-    .groupby(['id', 'packages_title'])['ori_amount'].sum().to_dict()
-
-transfer_summary = df[(df['type'] == 'Out') & (df['target_type'].isin(['user', 'egg']))] \
-    .groupby('target_id')['reward_points'].sum().to_dict()
-
-received_summary = df[df['type'] == 'In'] \
-    .groupby('title')['reward_points'].sum().to_dict()
-
 # Graph visualization
 st.subheader("Graph Visualization")
 net = Network(height="800px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
 net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
 
+# TRANSFER & RECEIVED 正常绘制
 for _, row in filtered_df.iterrows():
     sender = f"{row['username']}_{row['id']}"
-    sender_title = f"Username: {row['username']}<br>User ID: {row['id']}"
-    sender_url = f"https://yourdomain.com/user/{row['id']}"
-    net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC', title=sender_title, url=sender_url)
+    net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
 
     if row['type'] == 'Out' and row['target_type'] in ['user', 'egg'] and "TRANSFER" in selected_rels:
         receiver_row = df[df['id'] == row['target_id']]
         receiver = receiver_row['username'].values[0] if not receiver_row.empty else str(row['target_id'])
         receiver_node = f"{receiver}_{row['target_id']}"
-        total_transfer = transfer_summary.get(row['target_id'], row['reward_points'])
-        receiver_title = f"Username: {receiver}<br>User ID: {row['target_id']}"
-        receiver_url = f"https://yourdomain.com/user/{row['target_id']}"
-        edge_title = f"TRANSFER<br>Points: {row['reward_points']}<br>Total TRANSFER: {total_transfer}<br>Created At: {row['created_at']}"
-        net.add_node(receiver_node, label=receiver, shape='ellipse', color='#E0FFFF', title=receiver_title, url=receiver_url)
-        net.add_edge(sender, receiver_node, label=f'TRANSFER ({row["reward_points"]})', color='#AAAAAA', title=edge_title)
-
-    elif row['type'] == 'Out' and row['target_type'] == 'rewardslink_payment_gateway' and "SPEND" in selected_rels:
-        tid = f"Target:{row['target_id']}"
-        total_spend = spend_summary.get((row['id'], row['packages_title']), row['ori_amount'])
-        target_title = f"Target: {row['packages_title']}<br>Total SPEND: {total_spend} {row['ori_currency']}"
-        target_url = f"https://yourdomain.com/target/{row['target_id']}"
-        edge_title = f"SPEND<br>Amount: {row['ori_amount']} {row['ori_currency']}<br>Total SPEND: {total_spend}<br>Created At: {row['created_at']}"
-        net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1', title=target_title, url=target_url)
-        net.add_edge(sender, tid, label=f'SPEND ({row["ori_amount"]})', color='#AAAAAA', title=edge_title)
+        net.add_node(receiver_node, label=receiver, shape='ellipse', color='#E0FFFF')
+        net.add_edge(sender, receiver_node, label=f'TRANSFER ({row["reward_points"]})', color='#AAAAAA')
 
     elif row['type'] == 'In' and "RECEIVED" in selected_rels:
         sid = f"Source:{row['target_id']}"
-        total_received = received_summary.get(row['title'], row['reward_points'])
-        source_title = f"Source: {row['title']}<br>Total RECEIVED: {total_received}"
-        source_url = f"https://yourdomain.com/source/{row['target_id']}"
-        edge_title = f"RECEIVED<br>Points: {row['reward_points']}<br>Total RECEIVED: {total_received}<br>Created At: {row['created_at']}"
-        net.add_node(sid, label=row['title'], shape='box', color='#F0FFF0', title=source_title, url=source_url)
-        net.add_edge(sid, sender, label=f'RECEIVED ({row["reward_points"]})', color='#AAAAAA', title=edge_title)
+        net.add_node(sid, label=row['title'], shape='box', color='#F0FFF0')
+        net.add_edge(sid, sender, label=f'RECEIVED ({row["reward_points"]})', color='#AAAAAA')
+
+# SPEND 聚合后绘制（每个用户对每个套餐只绘制一条边）
+if "SPEND" in selected_rels:
+    spend_grouped = filtered_df[
+        (filtered_df['type'] == 'Out') & 
+        (filtered_df['target_type'] == 'rewardslink_payment_gateway')
+    ].groupby(['id', 'username', 'packages_title', 'target_id', 'ori_currency'])['ori_amount'].sum().reset_index()
+
+    for _, row in spend_grouped.iterrows():
+        sender = f"{row['username']}_{row['id']}"
+        tid = f"Target:{row['target_id']}"
+        net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1')
+        net.add_edge(sender, tid, label=f'SPEND ({row["ori_amount"]})', color='#AAAAAA')
 
 # 输出图谱 HTML
 tmp_dir = tempfile.gettempdir()
