@@ -111,23 +111,34 @@ if uploaded_file:
 
     for _, row in filtered_df.iterrows():
         sender = row['username']
-        net.add_node(sender, label=sender, shape='ellipse', color='#FFF8DC')  # 浅黄色
+        sender_title = f"Username: {sender}<br>User ID: {row['id']}"
+        sender_url = f"https://yourdomain.com/user/{row['id']}"
+        net.add_node(sender, label=sender, shape='ellipse', color='#FFF8DC', title=sender_title, url=sender_url)
 
         if row['type'] == 'Out' and row['target_type'] in ['user', 'egg'] and "TRANSFERRED" in selected_rels:
             receiver_row = df[df['id'] == row['target_id']]
             receiver = receiver_row['username'].values[0] if not receiver_row.empty else str(row['target_id'])
-            net.add_node(receiver, label=receiver, shape='ellipse', color='#E0FFFF')  # 浅蓝色
-            net.add_edge(sender, receiver, label=f'TRANSFERRED ({row["reward_points"]})', color='#AAAAAA')
+            receiver_title = f"Username: {receiver}<br>User ID: {row['target_id']}"
+            receiver_url = f"https://yourdomain.com/user/{row['target_id']}"
+            edge_title = f"TRANSFERRED<br>Points: {row['reward_points']}<br>Created At: {row['created_at']}"
+            net.add_node(receiver, label=receiver, shape='ellipse', color='#E0FFFF', title=receiver_title, url=receiver_url)
+            net.add_edge(sender, receiver, label=f'TRANSFERRED ({row["reward_points"]})', color='#AAAAAA', title=edge_title)
 
         elif row['type'] == 'Out' and row['target_type'] == 'rewardslink_payment_gateway' and "SPEND_TO" in selected_rels:
             tid = f"Target:{row['target_id']}"
-            net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1')  # 浅红色
-            net.add_edge(sender, tid, label=f'SPEND_TO ({row["ori_amount"]})', color='#AAAAAA')
+            target_title = f"Target: {row['packages_title']}<br>Amount: {row['ori_amount']} {row['ori_currency']}<br>Created At: {row['created_at']}"
+            target_url = f"https://yourdomain.com/target/{row['target_id']}"
+            edge_title = f"SPEND_TO<br>Amount: {row['ori_amount']} {row['ori_currency']}<br>Created At: {row['created_at']}"
+            net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1', title=target_title, url=target_url)
+            net.add_edge(sender, tid, label=f'SPEND_TO ({row["ori_amount"]})', color='#AAAAAA', title=edge_title)
 
         elif row['type'] == 'In' and "RECEIVED" in selected_rels:
             sid = f"Source:{row['target_id']}"
-            net.add_node(sid, label=row['title'], shape='box', color='#F0FFF0')  # 浅绿色
-            net.add_edge(sid, sender, label=f'RECEIVED ({row["reward_points"]})', color='#AAAAAA')
+            source_title = f"Source: {row['title']}<br>Points: {row['reward_points']}<br>Created At: {row['created_at']}"
+            source_url = f"https://yourdomain.com/source/{row['target_id']}"
+            edge_title = f"RECEIVED<br>Points: {row['reward_points']}<br>Created At: {row['created_at']}"
+            net.add_node(sid, label=row['title'], shape='box', color='#F0FFF0', title=source_title, url=source_url)
+            net.add_edge(sid, sender, label=f'RECEIVED ({row["reward_points"]})', color='#AAAAAA', title=edge_title)
 
     tmp_dir = tempfile.gettempdir()
     html_path = os.path.join(tmp_dir, "graph.html")
