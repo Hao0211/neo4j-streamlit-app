@@ -97,8 +97,7 @@ if uploaded_file:
     # Filter dataframe
     filtered_df = df.copy()
     if selected_user != "All":
-        user_id = df[df['username'] == selected_user]['id'].iloc[0]
-        filtered_df = filtered_df[(filtered_df['id'] == user_id) | (filtered_df['target_id'] == user_id)]
+        filtered_df = filtered_df[filtered_df['username'] == selected_user]
 
     filtered_df = filtered_df[
         (filtered_df['created_at'] >= pd.to_datetime(date_range[0])) &
@@ -107,29 +106,30 @@ if uploaded_file:
 
     # Graph visualization
     st.subheader("Graph Visualization")
-    net = Network(height="600px", width="100%", notebook=False)
+    net = Network(height="800px", width="100%", notebook=False, bgcolor="#ffffff", font_color="black")
+    net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
 
     for _, row in filtered_df.iterrows():
         sender = row['username']
-        net.add_node(sender, label=sender, shape='ellipse')
+        net.add_node(sender, label=sender, shape='ellipse', color='blue')
 
         if row['type'] == 'Out' and row['target_type'] in ['user', 'egg'] and "TRANSFERRED" in selected_rels:
             receiver_row = df[df['id'] == row['target_id']]
             receiver = receiver_row['username'].values[0] if not receiver_row.empty else str(row['target_id'])
-            net.add_node(receiver, label=receiver, shape='ellipse')
+            net.add_node(receiver, label=receiver, shape='ellipse', color='green')
             net.add_edge(sender, receiver, label=f'TRANSFERRED ({row["reward_points"]})')
 
         elif row['type'] == 'Out' and row['target_type'] == 'rewardslink_payment_gateway' and "SPEND_TO" in selected_rels:
             tid = f"Target:{row['target_id']}"
-            net.add_node(tid, label=row['packages_title'], shape='box')
+            net.add_node(tid, label=row['packages_title'], shape='box', color='orange')
             net.add_edge(sender, tid, label=f'SPEND_TO ({row["ori_amount"]})')
 
         elif row['type'] == 'In' and "RECEIVED" in selected_rels:
             sid = f"Source:{row['target_id']}"
-            net.add_node(sid, label=row['title'], shape='box')
+            net.add_node(sid, label=row['title'], shape='box', color='purple')
             net.add_edge(sid, sender, label=f'RECEIVED ({row["reward_points"]})')
 
     tmp_dir = tempfile.gettempdir()
     html_path = os.path.join(tmp_dir, "graph.html")
     net.write_html(html_path)
-    st.components.v1.html(Path(html_path).read_text(), height=600)
+    st.components.v1.html(Path(html_path).read_text(), height=800)
