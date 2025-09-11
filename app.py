@@ -35,7 +35,7 @@ if uploaded_file:
         WITH u, tx
         FOREACH (_ IN CASE WHEN $ttype = 'Out' AND $tgt_type IN ['user','egg'] THEN [1] ELSE [] END |
             MERGE (v:User {id: $tgt_id})
-            MERGE (u)-[r:TRANSFERRED {order_id: $order_id}]->(v)
+            MERGE (u)-[r:TRANSFER {order_id: $order_id}]->(v)
             ON CREATE SET r.points = $reward_points, r.created_at = datetime($created_at)
             MERGE (u)-[:HAS_TXN]->(tx)
             MERGE (tx)-[:TO]->(v)
@@ -43,7 +43,7 @@ if uploaded_file:
         FOREACH (_ IN CASE WHEN $ttype = 'Out' AND $tgt_type = 'rewardslink_payment_gateway' THEN [1] ELSE [] END |
             MERGE (t:Target {key: $key_spend})
             ON CREATE SET t.type = $tgt_type, t.name = $packages_title
-            MERGE (u)-[s:SPEND_TO {order_id: $order_id}]->(t)
+            MERGE (u)-[s:SPEND {order_id: $order_id}]->(t)
             ON CREATE SET s.amount = $amount, s.currency = $currency, s.ori_amount = $ori_amount, s.ori_currency = $ori_currency, s.created_at = datetime($created_at)
             MERGE (u)-[:HAS_TXN]->(tx)
             MERGE (tx)-[:TO]->(t)
@@ -88,7 +88,7 @@ if uploaded_file:
     st.sidebar.header("Graph Filters")
     usernames = df['username'].unique().tolist()
     selected_user = st.sidebar.selectbox("Select username", ["All"] + usernames)
-    rel_types = ["TRANSFERRED", "SPEND_TO", "RECEIVED"]
+    rel_types = ["TRANSFER", "SPEND", "RECEIVED"]
     selected_rels = st.sidebar.multiselect("Select relationship types", rel_types, default=rel_types)
     min_date = df['created_at'].min()
     max_date = df['created_at'].max()
@@ -115,22 +115,22 @@ if uploaded_file:
         sender_url = f"https://yourdomain.com/user/{row['id']}"
         net.add_node(sender, label=sender, shape='ellipse', color='#FFF8DC', title=sender_title, url=sender_url)
 
-        if row['type'] == 'Out' and row['target_type'] in ['user', 'egg'] and "TRANSFERRED" in selected_rels:
+        if row['type'] == 'Out' and row['target_type'] in ['user', 'egg'] and "TRANSFER" in selected_rels:
             receiver_row = df[df['id'] == row['target_id']]
             receiver = receiver_row['username'].values[0] if not receiver_row.empty else str(row['target_id'])
             receiver_title = f"Username: {receiver}<br>User ID: {row['target_id']}"
             receiver_url = f"https://yourdomain.com/user/{row['target_id']}"
-            edge_title = f"TRANSFERRED<br>Points: {row['reward_points']}<br>Created At: {row['created_at']}"
+            edge_title = f"TRANSFER<br>Points: {row['reward_points']}<br>Created At: {row['created_at']}"
             net.add_node(receiver, label=receiver, shape='ellipse', color='#E0FFFF', title=receiver_title, url=receiver_url)
-            net.add_edge(sender, receiver, label=f'TRANSFERRED ({row["reward_points"]})', color='#AAAAAA', title=edge_title)
+            net.add_edge(sender, receiver, label=f'TRANSFER ({row["reward_points"]})', color='#AAAAAA', title=edge_title)
 
-        elif row['type'] == 'Out' and row['target_type'] == 'rewardslink_payment_gateway' and "SPEND_TO" in selected_rels:
+        elif row['type'] == 'Out' and row['target_type'] == 'rewardslink_payment_gateway' and "SPEND" in selected_rels:
             tid = f"Target:{row['target_id']}"
             target_title = f"Target: {row['packages_title']}<br>Amount: {row['ori_amount']} {row['ori_currency']}<br>Created At: {row['created_at']}"
             target_url = f"https://yourdomain.com/target/{row['target_id']}"
-            edge_title = f"SPEND_TO<br>Amount: {row['ori_amount']} {row['ori_currency']}<br>Created At: {row['created_at']}"
+            edge_title = f"SPEND<br>Amount: {row['ori_amount']} {row['ori_currency']}<br>Created At: {row['created_at']}"
             net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1', title=target_title, url=target_url)
-            net.add_edge(sender, tid, label=f'SPEND_TO ({row["ori_amount"]})', color='#AAAAAA', title=edge_title)
+            net.add_edge(sender, tid, label=f'SPEND ({row["ori_amount"]})', color='#AAAAAA', title=edge_title)
 
         elif row['type'] == 'In' and "RECEIVED" in selected_rels:
             sid = f"Source:{row['target_id']}"
