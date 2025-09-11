@@ -20,9 +20,9 @@ uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
-    # Convert datetime fields to ISO 8601 format
-    df['created_at'] = pd.to_datetime(df['created_at']).dt.strftime('%Y-%m-%dT%H:%M:%S')
-    df['updated_at'] = pd.to_datetime(df['updated_at']).dt.strftime('%Y-%m-%dT%H:%M:%S')
+    # Convert datetime fields to datetime objects
+    df['created_at'] = pd.to_datetime(df['created_at'])
+    df['updated_at'] = pd.to_datetime(df['updated_at'])
 
     st.success("CSV file loaded successfully.")
     st.dataframe(df.head())
@@ -71,8 +71,8 @@ if uploaded_file:
             "ori_currency": row["ori_currency"],
             "ori_amount": float(row["ori_amount"]) if pd.notna(row["ori_amount"]) else 0.0,
             "reward_points": float(row["reward_points"]) if pd.notna(row["reward_points"]) else 0.0,
-            "created_at": row["created_at"],
-            "updated_at": row["updated_at"],
+            "created_at": row["created_at"].strftime('%Y-%m-%dT%H:%M:%S'),
+            "updated_at": row["updated_at"].strftime('%Y-%m-%dT%H:%M:%S'),
             "key_spend": f"{row['target_type']}:{int(row['target_id'])}" if pd.notna(row["target_id"]) else row["title"]
         })
 
@@ -87,31 +87,49 @@ if uploaded_file:
     agg_df = df.groupby("id").agg({"reward_points": "sum", "ori_amount": "sum"}).reset_index()
     st.dataframe(agg_df)
 
+    # Sidebar filters
+    st.sidebar.header("Graph Filters")
+    usernames = df['username'].unique().tolist()
+    selected_user = st.sidebar.selectbox("Select username", ["All"] + usernames)
+    rel_types = ["TRANSFERRED", "SPEND_TO", "RECEIVED"]
+    selected_rels = st.sidebar.multiselect("Select relationship types", rel_types, default=rel_types)
+    min_date = df['created_at'].min()
+    max_date = df['created_at'].max()
+    date_range = st.sidebar.date_input("Select date range", [min_date, max_date])
+
+    # Filter dataframe
+    filtered_df = df.copy()
+    if selected_user != "All":
+        filtered_df = filtered_df[(filtered_df['username'] == selected_user) | (filtered_df['target_id'].isin(df[df['username'] == selected_user]['id']))]
+    filtered_df = filtered_df[filtered_df['type'].map(lambda x: x.upper()).isin([r.split('_')[0] for r in selected_rels])]
+    filtered_df = filtered_df[(filtered_df['created_at'] >= pd.to_datetime(date_range[0])) & (filtered_df['created_at'] <= pd.to_datetime(date_range[1]))]
+
     # Graph visualization using pyvis
     st.subheader("Graph Visualization")
     net = Network(height="600px", width="100%", notebook=False)
 
-    for _, row in df.iterrows():
+    for _, row in filtered_df.iterrows():
         sender = row['username']
         net.add_node(sender, label=sender, shape='ellipse')
 
-        if row['type'] == 'Out' and row['target_type'] in ['user', 'egg']:
+        if row['type'] == 'Out' and row['target_type'] in ['user', 'egg'] and "TRANSFERRED" in selected_rels:
             receiver_row = df[df['id'] == row['target_id']]
             receiver = receiver_row['username'].values[0] if not receiver_row.empty else str(row['target_id'])
             net.add_node(receiver, label=receiver, shape='ellipse')
-            net.add_edge(sender, receiver, label='TRANSFERRED')
+            net.add_edge(sender, receiver, label=f'TRANSFERRED ({row["reward_points"]})')
 
-        elif row['type'] == 'Out' and row['target_type'] == 'rewardslink_payment_gateway':
+        elif row['type'] == 'Out' and row['target_type'] == 'rewardslink_payment_gateway' and "SPEND_TO" in selected_rels:
             tid = f"Target:{row['target_id']}"
             net.add_node(tid, label=row['packages_title'], shape='box')
             net.add_edge(sender, tid, label='SPEND_TO')
 
-        elif row['type'] == 'In':
+        elif row['type'] == 'In' and "RECEIVED" in selected_rels:
             sid = f"Source:{row['target_id']}"
             net.add_node(sid, label=row['title'], shape='box')
-            net.add_edge(sid, sender, label='RECEIVED')
+            net.add_edge(sid, sender, label=f'RECEIVED ({row["reward_points"]})')
 
     tmp_dir = tempfile.gettempdir()
     html_path = os.path.join(tmp_dir, "graph.html")
     net.write_html(html_path)
     st.components.v1.html(Path(html_path).read_text(), height=600)
+
