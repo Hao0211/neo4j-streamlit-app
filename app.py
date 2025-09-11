@@ -19,8 +19,6 @@ uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-
-    # Convert datetime fields to datetime objects
     df['created_at'] = pd.to_datetime(df['created_at'])
     df['updated_at'] = pd.to_datetime(df['updated_at'])
 
@@ -82,7 +80,6 @@ if uploaded_file:
                 session.write_transaction(import_to_neo4j, row)
         st.success("Data imported into Neo4j successfully.")
 
-    # User aggregation statistics
     st.subheader("User Aggregation Statistics")
     agg_df = df.groupby("id").agg({"reward_points": "sum", "ori_amount": "sum"}).reset_index()
     st.dataframe(agg_df)
@@ -100,11 +97,15 @@ if uploaded_file:
     # Filter dataframe
     filtered_df = df.copy()
     if selected_user != "All":
-        filtered_df = filtered_df[(filtered_df['username'] == selected_user) | (filtered_df['target_id'].isin(df[df['username'] == selected_user]['id']))]
-    filtered_df = filtered_df[filtered_df['type'].map(lambda x: x.upper()).isin([r.split('_')[0] for r in selected_rels])]
-    filtered_df = filtered_df[(filtered_df['created_at'] >= pd.to_datetime(date_range[0])) & (filtered_df['created_at'] <= pd.to_datetime(date_range[1]))]
+        user_id = df[df['username'] == selected_user]['id'].iloc[0]
+        filtered_df = filtered_df[(filtered_df['id'] == user_id) | (filtered_df['target_id'] == user_id)]
 
-    # Graph visualization using pyvis
+    filtered_df = filtered_df[
+        (filtered_df['created_at'] >= pd.to_datetime(date_range[0])) &
+        (filtered_df['created_at'] <= pd.to_datetime(date_range[1]))
+    ]
+
+    # Graph visualization
     st.subheader("Graph Visualization")
     net = Network(height="600px", width="100%", notebook=False)
 
@@ -121,7 +122,7 @@ if uploaded_file:
         elif row['type'] == 'Out' and row['target_type'] == 'rewardslink_payment_gateway' and "SPEND_TO" in selected_rels:
             tid = f"Target:{row['target_id']}"
             net.add_node(tid, label=row['packages_title'], shape='box')
-            net.add_edge(sender, tid, label='SPEND_TO')
+            net.add_edge(sender, tid, label=f'SPEND_TO ({row["ori_amount"]})')
 
         elif row['type'] == 'In' and "RECEIVED" in selected_rels:
             sid = f"Source:{row['target_id']}"
@@ -132,4 +133,3 @@ if uploaded_file:
     html_path = os.path.join(tmp_dir, "graph.html")
     net.write_html(html_path)
     st.components.v1.html(Path(html_path).read_text(), height=600)
-
