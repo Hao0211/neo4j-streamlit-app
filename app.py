@@ -23,7 +23,8 @@ if uploaded_file is not None:
     if "title" in df.columns and "body" in df.columns:
         st.subheader("Template Preview")
         with st.container():
-            st.dataframe(df, height=300, use_container_width=True)
+        sorted_df = df.sort_values(by=['level', 'id', 'created_at'], ascending=True)
+        st.dataframe(sorted_df, height=300, use_container_width=True)
 
 
 else:
