@@ -30,7 +30,7 @@ else:
     st.warning("Please upload a CSV file to proceed.")
     st.stop()
 
-# 导入 Neo4j 按钮
+# Import Neo4j Button
 def import_to_neo4j(tx, row):
     tx.run("""
     MERGE (u:User {id: $user_id})
@@ -93,10 +93,10 @@ selected_user = st.sidebar.selectbox("Select username", ["All"] + usernames)
 rel_types = ["TRANSFER", "SPEND", "RECEIVED"]
 selected_rels = st.sidebar.multiselect("Select relationship types", rel_types, default=rel_types)
 
-# 默认日期范围：过去一个月到今天
+# Default Date Range：Last 1 month until [today] date
 today = datetime.date.today()
-one_month_ago = today - datetime.timedelta(days=30)
-date_range = st.sidebar.date_input("Select date range", [one_month_ago, today])
+one_month_ago = today - datetime.timedelta(days=730)
+date_range = st.sidebar.date_input("Select date range", [two_years_ago, today])
 
 # Filter dataframe
 filtered_df = df.copy()
@@ -107,6 +107,8 @@ filtered_df = filtered_df[
     (filtered_df['created_at'] >= pd.to_datetime(date_range[0])) &
     (filtered_df['created_at'] <= pd.to_datetime(date_range[1]))
 ]
+
+
 
 # 图谱初始化（取消横向放大，设定高度）
 st.subheader("Graph Visualization")
