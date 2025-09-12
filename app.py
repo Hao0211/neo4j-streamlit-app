@@ -106,9 +106,9 @@ filtered_df = filtered_df[
     (filtered_df['created_at'] <= pd.to_datetime(date_range[1]))
 ]
 
-# 图谱初始化（横向放大）
+# 图谱初始化
 st.subheader("Graph Visualization")
-net = Network(height="800px", width="2000px", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
+net = Network(height="800px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
 net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
 
 # SPEND 聚合
@@ -167,11 +167,11 @@ if "RECEIVED" in selected_rels:
         net.add_node(source_node, label=row['title'], shape='box', color='#F0FFF0', title=source_title, url=source_url)
         net.add_edge(source_node, receiver, label=f'RECEIVED ({row["reward_points"]})', title=edge_title, color='#AAAAAA')
 
-# 输出图谱 HTML + 下载按钮
+# 输出图谱 HTML
 tmp_dir = tempfile.gettempdir()
 html_path = os.path.join(tmp_dir, "graph.html")
 net.write_html(html_path)
 st.components.v1.html(Path(html_path).read_text(), height=800)
 
-with open(html_path, "rb") as f:
-    st.download_button("Download Graph as HTML", f, file_name="graph_visualization.html")
+
+
