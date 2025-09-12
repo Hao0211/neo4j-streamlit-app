@@ -95,8 +95,8 @@ selected_rels = st.sidebar.multiselect("Select relationship types", rel_types, d
 
 # Default Date Range：Last 1 month until [today] date
 today = datetime.date.today()
-one_month_ago = today - datetime.timedelta(days=30)
-date_range = st.sidebar.date_input("Select date range", [one_month_ago, today])
+two_years_ago = today - datetime.timedelta(days=730)
+date_range = st.sidebar.date_input("Select date range", [two_years_ago, today])
 
 # Filter dataframe
 filtered_df = df.copy()
