@@ -83,7 +83,8 @@ if st.button("Import to Neo4j"):
 # Sidebar filters
 st.sidebar.header("Graph Filters")
 usernames = df['username'].unique().tolist()
-selected_user = st.sidebar.selectbox("Select username", ["All"] + usernames)
+usernames_with_all = ["All"] + usernames
+selected_users = st.sidebar.multiselect("Select username(s)", usernames_with_all, default=["All"])
 rel_types = ["TRANSFER", "SPEND", "RECEIVED"]
 selected_rels = st.sidebar.multiselect("Select relationship types", rel_types, default=rel_types)
 today = datetime.date.today()
