@@ -114,7 +114,10 @@ if "SPEND" in selected_rels:
         tid = f"Target:{row['target_id']}_{row['packages_title']}"
         net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
         net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1')
-        net.add_edge(sender, tid, label=f'SPEND ({row["ori_amount"]})', title=f"SPEND to {row['packages_title']}", color='#AAAAAA', arrows='to')
+        net.add_edge(sender, tid,
+                     label=f'SPEND ({row["ori_amount"]} {row["ori_currency"]})',
+                     title=f'SPEND {row["ori_amount"]} {row["ori_currency"]} to {row["packages_title"]}',
+                     color='#AAAAAA', arrows='to')
 
 # TRANSFER
 if "TRANSFER" in selected_rels:
@@ -126,7 +129,10 @@ if "TRANSFER" in selected_rels:
         receiver_node = f"User_{row['target_id']}_{row['title']}"
         net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
         net.add_node(receiver_node, label=row['title'], shape='ellipse', color='#E0FFFF')
-        net.add_edge(sender, receiver_node, label=f'TRANSFER ({row["reward_points"]})', title=f"TRANSFER to {row['target_id']}", color='#AAAAAA', arrows='to')
+        net.add_edge(sender, receiver_node,
+                     label=f'TRANSFER ({row["reward_points"]} points)',
+                     title=f'TRANSFER {row["reward_points"]} reward points to {row["target_id"]}',
+                     color='#AAAAAA', arrows='to')
 
 # RECEIVED
 if "RECEIVED" in selected_rels:
@@ -138,7 +144,10 @@ if "RECEIVED" in selected_rels:
         source_node = f"Source:{row['target_id']}_{row['title']}"
         net.add_node(receiver, label=row['username'], shape='ellipse', color='#FFF8DC')
         net.add_node(source_node, label=row['title'], shape='box', color='#F0FFF0')
-        net.add_edge(source_node, receiver, label=f'RECEIVED ({row["reward_points"]})', title=f"RECEIVED from {row['title']}", color='#AAAAAA', arrows='to')
+        net.add_edge(source_node, receiver,
+                     label=f'RECEIVED ({row["reward_points"]} points)',
+                     title=f'RECEIVED {row["reward_points"]} reward points from {row["title"]}',
+                     color='#AAAAAA', arrows='to')
 
 # 输出图谱 HTML
 tmp_dir = tempfile.gettempdir()
