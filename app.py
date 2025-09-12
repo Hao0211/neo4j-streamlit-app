@@ -111,7 +111,7 @@ st.subheader("Graph Visualization")
 net = Network(height="800px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
 net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
 
-# SPEND 聚合（按 packages_title 分组）
+# SPEND 聚合
 if "SPEND" in selected_rels:
     spend_grouped = filtered_df[
         (filtered_df['type'] == 'Out') & 
@@ -121,12 +121,16 @@ if "SPEND" in selected_rels:
     for _, row in spend_grouped.iterrows():
         sender = f"{row['username']}_{row['id']}"
         tid = f"Target:{row['target_id']}_{row['packages_title']}"
-        net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
-        net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1')
-        edge_title = f"SPEND to {row['packages_title']}<br>Total: {row['ori_amount']} {row['ori_currency']}"
+        sender_url = f"https://yourdomain.com/user/{row['id']}"
+        sender_title = f"Username: {row['username']}<br>User ID: {row['id']}"
+        target_url = f"https://yourdomain.com/target/{row['target_id']}"
+        target_title = f"Target: {row['packages_title']}<br>Total SPEND: {row['ori_amount']} {row['ori_currency']}"
+        edge_title = f"SPEND to {row['packages_title']}<br>Amount: {row['ori_amount']} {row['ori_currency']}"
+        net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC', title=sender_title, url=sender_url)
+        net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1', title=target_title, url=target_url)
         net.add_edge(sender, tid, label=f'SPEND ({row["ori_amount"]})', title=edge_title, color='#AAAAAA')
 
-# TRANSFER 聚合（按 title 分组）
+# TRANSFER 聚合
 if "TRANSFER" in selected_rels:
     transfer_grouped = filtered_df[
         (filtered_df['type'] == 'Out') & 
@@ -136,12 +140,16 @@ if "TRANSFER" in selected_rels:
     for _, row in transfer_grouped.iterrows():
         sender = f"{row['username']}_{row['id']}"
         receiver_node = f"User_{row['target_id']}_{row['title']}"
-        net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
-        net.add_node(receiver_node, label=row['title'], shape='ellipse', color='#E0FFFF')
+        sender_url = f"https://yourdomain.com/user/{row['id']}"
+        sender_title = f"Username: {row['username']}<br>User ID: {row['id']}"
+        receiver_url = f"https://yourdomain.com/user/{row['target_id']}"
+        receiver_title = f"Receiver Title: {row['title']}<br>User ID: {row['target_id']}"
         edge_title = f"TRANSFER to user {row['target_id']}<br>Title: {row['title']}<br>Points: {row['reward_points']}"
+        net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC', title=sender_title, url=sender_url)
+        net.add_node(receiver_node, label=row['title'], shape='ellipse', color='#E0FFFF', title=receiver_title, url=receiver_url)
         net.add_edge(sender, receiver_node, label=f'TRANSFER ({row["reward_points"]})', title=edge_title, color='#AAAAAA')
 
-# RECEIVED 聚合（按 title 分组）
+# RECEIVED 聚合
 if "RECEIVED" in selected_rels:
     received_grouped = filtered_df[
         (filtered_df['type'] == 'In')
@@ -150,9 +158,13 @@ if "RECEIVED" in selected_rels:
     for _, row in received_grouped.iterrows():
         receiver = f"{row['username']}_{row['id']}"
         source_node = f"Source:{row['target_id']}_{row['title']}"
-        net.add_node(receiver, label=row['username'], shape='ellipse', color='#FFF8DC')
-        net.add_node(source_node, label=row['title'], shape='box', color='#F0FFF0')
+        receiver_url = f"https://yourdomain.com/user/{row['id']}"
+        receiver_title = f"Username: {row['username']}<br>User ID: {row['id']}"
+        source_url = f"https://yourdomain.com/source/{row['target_id']}"
+        source_title = f"Source Title: {row['title']}<br>Source ID: {row['target_id']}"
         edge_title = f"RECEIVED from source<br>Title: {row['title']}<br>Points: {row['reward_points']}"
+        net.add_node(receiver, label=row['username'], shape='ellipse', color='#FFF8DC', title=receiver_title, url=receiver_url)
+        net.add_node(source_node, label=row['title'], shape='box', color='#F0FFF0', title=source_title, url=source_url)
         net.add_edge(source_node, receiver, label=f'RECEIVED ({row["reward_points"]})', title=edge_title, color='#AAAAAA')
 
 # 输出图谱 HTML
