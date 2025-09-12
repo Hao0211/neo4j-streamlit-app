@@ -109,7 +109,26 @@ filtered_df = filtered_df[
 ]
 
 # 图谱初始化（取消横向放大，设定高度）
+
+# Enhanced Graph Visualization
 st.subheader("Graph Visualization")
+
+# Layout selection
+layout_option = st.sidebar.selectbox("Select Graph Layout", ["Force Atlas", "Barnes Hut"])
+
+# Graph type selection
+graph_type = st.sidebar.selectbox("Graph Type", ["All", "SPEND", "TRANSFER", "RECEIVED"])
+
+# Node search
+search_node = st.sidebar.text_input("Search Node Label")
+
+net = Network(height="780px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
+
+if layout_option == "Force Atlas":
+    net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
+else:
+    net.barnes_hut()
+
 net = Network(height="780px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
 net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
 
