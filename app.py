@@ -101,7 +101,10 @@ filtered_df = filtered_df[
 
 
 
-# 图谱可视化（修复版：显示用户名和关系类型）
+# 构建 ID → username 映射
+id_to_username = dict(zip(df['id'], df['username']))
+
+# 图谱可视化（显示 username 路径）
 st.subheader("Graph Visualization")
 net = Network(height="780px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000", directed=True)
 net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
@@ -111,7 +114,7 @@ if "TRANSFER" in selected_rels:
     transfer_df = filtered_df[(filtered_df['type'] == 'Out') & (filtered_df['target_type'].isin(['user', 'egg']))]
     for _, row in transfer_df.iterrows():
         sender = row['username']
-        receiver = str(row['target_id'])
+        receiver = id_to_username.get(row['target_id'], str(row['target_id']))
         net.add_node(sender, label=sender, shape='ellipse', color='#FFF8DC')
         net.add_node(receiver, label=receiver, shape='ellipse', color='#E0FFFF')
         net.add_edge(sender, receiver, label=f"TRANSFER ({row['reward_points']})", title="TRANSFER", arrows='to', color='#888')
@@ -142,8 +145,8 @@ import tempfile
 from pathlib import Path
 
 tmp_dir = tempfile.gettempdir()
-html_path = os.path.join(tmp_dir, "graph_cleaned.html")
+html_path = os.path.join(tmp_dir, "graph_username_path.html")
 net.write_html(html_path)
 st.components.v1.html(Path(html_path).read_text(), height=790)
 with open(html_path, "rb") as f:
-    st.download_button("Download Graph as HTML", f, file_name="graph_cleaned.html")
+    st.download_button("Download Graph as HTML", f, file_name="graph_username_path.html")
