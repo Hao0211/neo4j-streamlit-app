@@ -20,26 +20,10 @@ if uploaded_file is not None:
     st.success("CSV file loaded successfully.")
 
     # 显示 title 和 body 表格（支持横向滚动）
- if "title" in df.columns and "body" in df.columns:
-    st.subheader("Template Preview")
-    st.info("以下是上传数据的预览，仅显示部分字段。")
-
-    required_columns = [
-        "username", "order_id", "title", "body", "packages_title", "type",
-        "target_type", "target_id", "currency", "amount", "ori_currency",
-        "ori_amount", "reward_points", "status", "created_at", "updated_at",
-        "patch_id", "current_balance_amount"
-    ]
-
-    available_columns = [col for col in required_columns if col in df.columns]
-
-    try:
+    if "title" in df.columns and "body" in df.columns:
+        st.subheader("Template Preview")
         with st.container():
-            st.dataframe(df[available_columns], height=300, use_container_width=True)
-    except Exception as e:
-        st.error(f"数据展示失败：{e}")
-else:
-    st.warning("数据中缺少 'title' 或 'body' 字段，无法预览模板。")
+           st.dataframe(df[["username", "order_id", "title", "body","packages_title","type","target_type","target_id","currency","amount","ori_currency","ori_amount","reward_points","status","created_at","updated_at","patch_id","current_balance_amount"]], height=300, use_container_width=False)
 
 
 else:
