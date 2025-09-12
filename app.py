@@ -8,10 +8,7 @@ from neo4j import GraphDatabase
 import datetime
 
 # Neo4j Aura credentials
-NEO4J_URI = "neo4j+s://2469831c.databases.neo4j.io"
-NEO4J_USERNAME = "neo4j"
-NEO4J_PASSWORD = "VZzJzRBADaHoeLuwJsib9fDY5BbxUW0xCakjjkFJCIk"
-driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+
 
 # CSV 上传
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
