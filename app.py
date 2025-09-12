@@ -103,29 +103,12 @@ filtered_df = filtered_df[
     (filtered_df['created_at'] <= pd.to_datetime(date_range[1]))
 ]
 
-# Graph visualization
+# 图谱初始化
 st.subheader("Graph Visualization")
 net = Network(height="800px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
 net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
 
-# TRANSFER & RECEIVED 正常绘制
-for _, row in filtered_df.iterrows():
-    sender = f"{row['username']}_{row['id']}"
-    net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
-
-    if row['type'] == 'Out' and row['target_type'] in ['user', 'egg'] and "TRANSFER" in selected_rels:
-        receiver_row = df[df['id'] == row['target_id']]
-        receiver = receiver_row['username'].values[0] if not receiver_row.empty else str(row['target_id'])
-        receiver_node = f"{receiver}_{row['target_id']}"
-        net.add_node(receiver_node, label=receiver, shape='ellipse', color='#E0FFFF')
-        net.add_edge(sender, receiver_node, label=f'TRANSFER ({row["reward_points"]})', color='#AAAAAA')
-
-    elif row['type'] == 'In' and "RECEIVED" in selected_rels:
-        sid = f"Source:{row['target_id']}"
-        net.add_node(sid, label=row['title'], shape='box', color='#F0FFF0')
-        net.add_edge(sid, sender, label=f'RECEIVED ({row["reward_points"]})', color='#AAAAAA')
-
-# SPEND 聚合后绘制（每个用户对每个套餐只绘制一条边）
+# SPEND 聚合后绘制
 if "SPEND" in selected_rels:
     spend_grouped = filtered_df[
         (filtered_df['type'] == 'Out') & 
@@ -135,8 +118,36 @@ if "SPEND" in selected_rels:
     for _, row in spend_grouped.iterrows():
         sender = f"{row['username']}_{row['id']}"
         tid = f"Target:{row['target_id']}"
+        net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
         net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1')
         net.add_edge(sender, tid, label=f'SPEND ({row["ori_amount"]})', color='#AAAAAA')
+
+# TRANSFER 聚合后绘制
+if "TRANSFER" in selected_rels:
+    transfer_grouped = filtered_df[
+        (filtered_df['type'] == 'Out') & 
+        (filtered_df['target_type'].isin(['user', 'egg']))
+    ].groupby(['id', 'username', 'target_id'])['reward_points'].sum().reset_index()
+
+    for _, row in transfer_grouped.iterrows():
+        sender = f"{row['username']}_{row['id']}"
+        receiver_node = f"User_{row['target_id']}"
+        net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
+        net.add_node(receiver_node, label=str(row['target_id']), shape='ellipse', color='#E0FFFF')
+        net.add_edge(sender, receiver_node, label=f'TRANSFER ({row["reward_points"]})', color='#AAAAAA')
+
+# RECEIVED 聚合后绘制
+if "RECEIVED" in selected_rels:
+    received_grouped = filtered_df[
+        (filtered_df['type'] == 'In')
+    ].groupby(['id', 'username', 'title', 'target_id'])['reward_points'].sum().reset_index()
+
+    for _, row in received_grouped.iterrows():
+        receiver = f"{row['username']}_{row['id']}"
+        source_node = f"Source:{row['target_id']}"
+        net.add_node(receiver, label=row['username'], shape='ellipse', color='#FFF8DC')
+        net.add_node(source_node, label=row['title'], shape='box', color='#F0FFF0')
+        net.add_edge(source_node, receiver, label=f'RECEIVED ({row["reward_points"]})', color='#AAAAAA')
 
 # 输出图谱 HTML
 tmp_dir = tempfile.gettempdir()
