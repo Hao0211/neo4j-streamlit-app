@@ -11,7 +11,7 @@ import datetime
 NEO4J_URI = "neo4j+s://2469831c.databases.neo4j.io"
 NEO4J_USERNAME = "neo4j"
 NEO4J_PASSWORD = "VZzJzRBADaHoeLuwJsib9fDY5BbxUW0xCakjjkFJCIk"
-driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD)
+driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
 # CSV 上传
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
@@ -95,9 +95,8 @@ selected_rels = st.sidebar.multiselect("Select relationship types", rel_types, d
 
 # Default Date Range：Last 1 month until [today] date
 today = datetime.date.today()
-two_years_ago = today - datetime.timedelta(days=730)
-date_range = st.sidebar.date_input("Select date range", [two_years_ago, today])
-
+one_month_ago = today - datetime.timedelta(days=30)
+date_range = st.sidebar.date_input("Select date range", [one_month_ago, today])
 
 # Filter dataframe
 filtered_df = df.copy()
@@ -108,8 +107,6 @@ filtered_df = filtered_df[
     (filtered_df['created_at'] >= pd.to_datetime(date_range[0])) &
     (filtered_df['created_at'] <= pd.to_datetime(date_range[1]))
 ]
-
-
 
 # 图谱初始化（取消横向放大，设定高度）
 st.subheader("Graph Visualization")
