@@ -127,7 +127,7 @@ if "SPEND" in selected_rels:
         target = row['packages_title']
         net.add_node(sender, label=sender, shape='ellipse', color='#FFF8DC')
         net.add_node(target, label=target, shape='box', color='#FFDAB9')
-        net.add_edge(sender, target, label=f"SPEND ({row['ori_amount']} {row['ori_currency']})", title="SPEND", arrows='to', color='#999')
+        net.add_edge(sender, target, label=f"SPEND ({row['ori_amount']} {row['ori_currency']}, {row['reward_points']} pts)", title="SPEND", arrows='to', color='#999')
 
 # RECEIVED
 if "RECEIVED" in selected_rels:
@@ -137,7 +137,7 @@ if "RECEIVED" in selected_rels:
         source = row['title']
         net.add_node(receiver, label=receiver, shape='ellipse', color='#FFF8DC')
         net.add_node(source, label=source, shape='box', color='#C1FFC1')
-        net.add_edge(source, receiver, label=f"RECEIVED ({row['reward_points']})", title="RECEIVED", arrows='to', color='#666')
+        net.add_edge(source, receiver, label=f"RECEIVED ({row['reward_points']} pts, {row['ori_amount']} {row['ori_currency']})", title="RECEIVED", arrows='to', color='#666')
 
 # 输出图谱 HTML
 import os
