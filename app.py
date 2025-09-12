@@ -5,6 +5,7 @@ import tempfile
 from pyvis.network import Network
 from pathlib import Path
 from neo4j import GraphDatabase
+import datetime
 
 # Neo4j Aura credentials
 NEO4J_URI = "neo4j+s://2469831c.databases.neo4j.io"
@@ -89,9 +90,11 @@ usernames = df['username'].unique().tolist()
 selected_user = st.sidebar.selectbox("Select username", ["All"] + usernames)
 rel_types = ["TRANSFER", "SPEND", "RECEIVED"]
 selected_rels = st.sidebar.multiselect("Select relationship types", rel_types, default=rel_types)
-min_date = df['created_at'].min()
-max_date = df['created_at'].max()
-date_range = st.sidebar.date_input("Select date range", [min_date, max_date])
+
+# 默认日期范围：过去一个月到今天
+today = datetime.date.today()
+one_month_ago = today - datetime.timedelta(days=30)
+date_range = st.sidebar.date_input("Select date range", [one_month_ago, today])
 
 # Filter dataframe
 filtered_df = df.copy()
