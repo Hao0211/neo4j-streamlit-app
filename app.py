@@ -116,9 +116,6 @@ st.subheader("Graph Visualization")
 # Layout selection
 layout_option = st.sidebar.selectbox("Select Graph Layout", ["Force Atlas", "Barnes Hut"])
 
-# Graph type selection
-graph_type = st.sidebar.selectbox("Graph Type", ["All", "SPEND", "TRANSFER", "RECEIVED"])
-
 # Node search
 search_node = st.sidebar.text_input("Search Node Label")
 
