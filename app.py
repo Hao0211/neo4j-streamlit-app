@@ -135,7 +135,7 @@ if "TRANSFER" in selected_rels:
         receiver_node = f"User_{row['target_id']}_{row['title']}"
         net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
         net.add_node(receiver_node, label=row['title'], shape='ellipse', color='#E0FFFF')
-        edge_title = f"Transfer to user {row['target_id']}<br>Title: {row['title']}<br>Points: {row['reward_points']}"
+        edge_title = f"TRANSFER to user {row['target_id']}<br>Title: {row['title']}<br>Points: {row['reward_points']}"
         net.add_edge(sender, receiver_node, label=f'TRANSFER ({row["reward_points"]})', title=edge_title, color='#AAAAAA')
 
 # RECEIVED 聚合（按 title 分组）
