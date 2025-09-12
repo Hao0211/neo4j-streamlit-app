@@ -109,14 +109,12 @@ filtered_df = filtered_df[
 ]
 
 # 图谱初始化（取消横向放大，设定高度）
-show_graph = st.button("Toggle Graph Visualization")
 st.subheader("Graph Visualization")
-if show_graph:
-    net = Network(height="780px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
-    net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
+net = Network(height="780px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
+net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
 
-    # SPEND 聚合
-    if "SPEND" in selected_rels:
+# SPEND 聚合
+if "SPEND" in selected_rels:
     spend_grouped = filtered_df[
         (filtered_df['type'] == 'Out') & 
         (filtered_df['target_type'] == 'rewardslink_payment_gateway')
@@ -134,8 +132,8 @@ if show_graph:
         net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1', title=target_title, url=target_url)
         net.add_edge(sender, tid, label=f'SPEND ({row["ori_amount"]})', title=edge_title, color='#AAAAAA')
 
-    # TRANSFER 聚合
-    if "TRANSFER" in selected_rels:
+# TRANSFER 聚合
+if "TRANSFER" in selected_rels:
     transfer_grouped = filtered_df[
         (filtered_df['type'] == 'Out') & 
         (filtered_df['target_type'].isin(['user', 'egg']))
@@ -153,8 +151,8 @@ if show_graph:
         net.add_node(receiver_node, label=row['title'], shape='ellipse', color='#E0FFFF', title=receiver_title, url=receiver_url)
         net.add_edge(sender, receiver_node, label=f'TRANSFER ({row["reward_points"]})', title=edge_title, color='#AAAAAA')
 
-    # RECEIVED 聚合
-    if "RECEIVED" in selected_rels:
+# RECEIVED 聚合
+if "RECEIVED" in selected_rels:
     received_grouped = filtered_df[
         (filtered_df['type'] == 'In')
     ].groupby(['id', 'username', 'title', 'target_id'])['reward_points'].sum().round(2).reset_index()
@@ -171,11 +169,11 @@ if show_graph:
         net.add_node(source_node, label=row['title'], shape='box', color='#F0FFF0', title=source_title, url=source_url)
         net.add_edge(source_node, receiver, label=f'RECEIVED ({row["reward_points"]})', title=edge_title, color='#AAAAAA')
 
-    # 输出图谱 HTML + 下载按钮
-    tmp_dir = tempfile.gettempdir()
-    html_path = os.path.join(tmp_dir, "graph.html")
-    net.write_html(html_path)
-    st.components.v1.html(Path(html_path).read_text(), height=790)
+# 输出图谱 HTML + 下载按钮
+tmp_dir = tempfile.gettempdir()
+html_path = os.path.join(tmp_dir, "graph.html")
+net.write_html(html_path)
+st.components.v1.html(Path(html_path).read_text(), height=790)
 
-    with open(html_path, "rb") as f:
+with open(html_path, "rb") as f:
     st.download_button("Download Graph as HTML", f, file_name="graph_visualization.html")
