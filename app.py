@@ -112,6 +112,9 @@ filtered_df = filtered_df[
 st.subheader("Graph Visualization")
 net = Network(height="780px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
 net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
+st.subheader("Graph Visualization")
+net = Network(height="780px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
+net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
 
 # SPEND 聚合
 if "SPEND" in selected_rels:
