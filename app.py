@@ -18,12 +18,17 @@ uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file, parse_dates=["created_at", "updated_at"])
     st.success("CSV file loaded successfully.")
-    st.dataframe(df.head())
+
+    # 显示 title 和 body 表格（可滚动）
+    if "title" in df.columns and "body" in df.columns:
+        st.subheader("Transaction Template Preview")
+        st.dataframe(df[["username", "order_id", "title", "body"]], height=300)
+
 else:
     st.warning("Please upload a CSV file to proceed.")
     st.stop()
 
-# Neo4j 导入函数
+# 导入 Neo4j 按钮
 def import_to_neo4j(tx, row):
     tx.run("""
     MERGE (u:User {id: $user_id})
@@ -79,11 +84,6 @@ if st.button("Import to Neo4j"):
             session.write_transaction(import_to_neo4j, row)
     st.success("Data imported into Neo4j successfully.")
 
-# 用户聚合统计
-st.subheader("User Aggregation Statistics")
-agg_df = df.groupby("id").agg({"reward_points": "sum", "ori_amount": "sum"}).reset_index()
-st.dataframe(agg_df)
-
 # Sidebar filters
 st.sidebar.header("Graph Filters")
 usernames = df['username'].unique().tolist()
@@ -106,7 +106,7 @@ filtered_df = filtered_df[
     (filtered_df['created_at'] <= pd.to_datetime(date_range[1]))
 ]
 
-# 图谱初始化
+# 图谱初始化（取消横向放大，设定高度）
 st.subheader("Graph Visualization")
 net = Network(height="790px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
 net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
@@ -116,7 +116,7 @@ if "SPEND" in selected_rels:
     spend_grouped = filtered_df[
         (filtered_df['type'] == 'Out') & 
         (filtered_df['target_type'] == 'rewardslink_payment_gateway')
-    ].groupby(['id', 'username', 'packages_title', 'target_id', 'ori_currency'])['ori_amount'].sum().reset_index()
+    ].groupby(['id', 'username', 'packages_title', 'target_id', 'ori_currency'])['ori_amount'].sum().round(2).reset_index()
 
     for _, row in spend_grouped.iterrows():
         sender = f"{row['username']}_{row['id']}"
@@ -135,7 +135,7 @@ if "TRANSFER" in selected_rels:
     transfer_grouped = filtered_df[
         (filtered_df['type'] == 'Out') & 
         (filtered_df['target_type'].isin(['user', 'egg']))
-    ].groupby(['id', 'username', 'target_id', 'title'])['reward_points'].sum().reset_index()
+    ].groupby(['id', 'username', 'target_id', 'title'])['reward_points'].sum().round(2).reset_index()
 
     for _, row in transfer_grouped.iterrows():
         sender = f"{row['username']}_{row['id']}"
@@ -153,7 +153,7 @@ if "TRANSFER" in selected_rels:
 if "RECEIVED" in selected_rels:
     received_grouped = filtered_df[
         (filtered_df['type'] == 'In')
-    ].groupby(['id', 'username', 'title', 'target_id'])['reward_points'].sum().reset_index()
+    ].groupby(['id', 'username', 'title', 'target_id'])['reward_points'].sum().round(2).reset_index()
 
     for _, row in received_grouped.iterrows():
         receiver = f"{row['username']}_{row['id']}"
@@ -167,11 +167,11 @@ if "RECEIVED" in selected_rels:
         net.add_node(source_node, label=row['title'], shape='box', color='#F0FFF0', title=source_title, url=source_url)
         net.add_edge(source_node, receiver, label=f'RECEIVED ({row["reward_points"]})', title=edge_title, color='#AAAAAA')
 
-# 输出图谱 HTML
+# 输出图谱 HTML + 下载按钮
 tmp_dir = tempfile.gettempdir()
 html_path = os.path.join(tmp_dir, "graph.html")
 net.write_html(html_path)
-st.components.v1.html(Path(html_path).read_text(), height=800)
+st.components.v1.html(Path(html_path).read_text(), height=790)
 
-
-
+with open(html_path, "rb") as f:
+    st.download_button("Download Graph as HTML", f, file_name="graph_visualization.html")
