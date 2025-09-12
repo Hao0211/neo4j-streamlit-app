@@ -23,7 +23,7 @@ if uploaded_file is not None:
     if "title" in df.columns and "body" in df.columns:
         st.subheader("Template Preview")
         with st.container():
-           st.dataframe(df[["username", "order_id", "title", "body","packages_title","type","target_type","target_id","currency","amount","ori_currency","ori_amount","reward_points","status","created_at","updated_at","patch_id","current_balance_amount"]], height=300, use_container_width=False)
+           st.dataframe(df[["username", "order_id", "title", "body"]], height=300, use_container_width=False)
 
 
 else:
