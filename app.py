@@ -19,10 +19,11 @@ if uploaded_file is not None:
     df = pd.read_csv(uploaded_file, parse_dates=["created_at", "updated_at"])
     st.success("CSV file loaded successfully.")
 
-    # 显示 title 和 body 表格（可滚动）
+    # 显示 title 和 body 表格（支持横向滚动）
     if "title" in df.columns and "body" in df.columns:
-        st.subheader("Transaction Template Preview")
-        st.dataframe(df[["username", "order_id", "title", "body"]], height=300)
+        st.subheader("Template Preview")
+        with st.container():
+            st.dataframe(df[["username", "order_id", "title", "body"]], height=300, use_container_width=False)
 
 else:
     st.warning("Please upload a CSV file to proceed.")
