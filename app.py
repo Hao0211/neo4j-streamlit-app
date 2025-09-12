@@ -23,7 +23,7 @@ if uploaded_file is not None:
     if "title" in df.columns and "body" in df.columns:
         st.subheader("Template Preview")
         with st.container():
-            st.dataframe(df[["username", "order_id", "title", "body"]], height=300, use_container_width=False)
+           st.dataframe(df, height=300, use_container_width=False
 
 else:
     st.warning("Please upload a CSV file to proceed.")
