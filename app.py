@@ -101,44 +101,40 @@ filtered_df = filtered_df[
 
 
 
-# 简化图谱可视化
-st.subheader("Simplified Graph Visualization")
+# 图谱可视化（修复版：显示用户名和关系类型）
+st.subheader("Graph Visualization")
 net = Network(height="780px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000", directed=True)
 net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
 
-# 添加 TRANSFER 关系
+# TRANSFER
 if "TRANSFER" in selected_rels:
-    transfer_df = filtered_df[
-        (filtered_df['type'] == 'Out') & (filtered_df['target_type'].isin(['user', 'egg']))
-    ]
+    transfer_df = filtered_df[(filtered_df['type'] == 'Out') & (filtered_df['target_type'].isin(['user', 'egg']))]
     for _, row in transfer_df.iterrows():
-        sender = f"{row['username']}_{row['id']}"
-        receiver = f"user_{int(row['target_id'])}"
-        net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
-        net.add_node(receiver, label=str(int(row['target_id'])), shape='ellipse', color='#E0FFFF')
-        net.add_edge(sender, receiver, label=f"{row['reward_points']}", title="TRANSFER", arrows='to', color='#888')
+        sender = row['username']
+        receiver = str(row['target_id'])
+        net.add_node(sender, label=sender, shape='ellipse', color='#FFF8DC')
+        net.add_node(receiver, label=receiver, shape='ellipse', color='#E0FFFF')
+        net.add_edge(sender, receiver, label=f"TRANSFER ({row['reward_points']})", title="TRANSFER", arrows='to', color='#888')
 
-# 添加 SPEND 关系
+# SPEND
 if "SPEND" in selected_rels:
-    spend_df = filtered_df[
-        (filtered_df['type'] == 'Out') & (filtered_df['target_type'] == 'rewardslink_payment_gateway')
-    ]
+    spend_df = filtered_df[(filtered_df['type'] == 'Out') & (filtered_df['target_type'] == 'rewardslink_payment_gateway')]
     for _, row in spend_df.iterrows():
-        sender = f"{row['username']}_{row['id']}"
-        target = f"target_{row['target_id']}"
-        net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
-        net.add_node(target, label=row['packages_title'], shape='box', color='#FFDAB9')
-        net.add_edge(sender, target, label=f"{row['ori_amount']} {row['ori_currency']}", title="SPEND", arrows='to', color='#999')
+        sender = row['username']
+        target = row['packages_title']
+        net.add_node(sender, label=sender, shape='ellipse', color='#FFF8DC')
+        net.add_node(target, label=target, shape='box', color='#FFDAB9')
+        net.add_edge(sender, target, label=f"SPEND ({row['ori_amount']} {row['ori_currency']})", title="SPEND", arrows='to', color='#999')
 
-# 添加 RECEIVED 关系
+# RECEIVED
 if "RECEIVED" in selected_rels:
     received_df = filtered_df[filtered_df['type'] == 'In']
     for _, row in received_df.iterrows():
-        receiver = f"{row['username']}_{row['id']}"
-        source = f"source_{row['target_id']}"
-        net.add_node(receiver, label=row['username'], shape='ellipse', color='#FFF8DC')
-        net.add_node(source, label=row['title'], shape='box', color='#C1FFC1')
-        net.add_edge(source, receiver, label=f"{row['reward_points']}", title="RECEIVED", arrows='to', color='#666')
+        receiver = row['username']
+        source = row['title']
+        net.add_node(receiver, label=receiver, shape='ellipse', color='#FFF8DC')
+        net.add_node(source, label=source, shape='box', color='#C1FFC1')
+        net.add_edge(source, receiver, label=f"RECEIVED ({row['reward_points']})", title="RECEIVED", arrows='to', color='#666')
 
 # 输出图谱 HTML
 import os
@@ -146,8 +142,8 @@ import tempfile
 from pathlib import Path
 
 tmp_dir = tempfile.gettempdir()
-html_path = os.path.join(tmp_dir, "graph_simple.html")
+html_path = os.path.join(tmp_dir, "graph_cleaned.html")
 net.write_html(html_path)
 st.components.v1.html(Path(html_path).read_text(), height=790)
 with open(html_path, "rb") as f:
-    st.download_button("Download Graph as HTML", f, file_name="graph_simple.html")
+    st.download_button("Download Graph as HTML", f, file_name="graph_cleaned.html")
