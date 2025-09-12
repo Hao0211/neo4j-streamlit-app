@@ -39,7 +39,7 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"数据展示失败：{e}")
 else:
-    st.warning("数据中缺少 'title' 或 'body' 字段，无法预览模板。"
+    st.warning("数据中缺少 'title' 或 'body' 字段，无法预览模板。")
 
 
 else:
