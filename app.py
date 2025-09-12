@@ -109,7 +109,9 @@ filtered_df = filtered_df[
 ]
 
 # 图谱初始化（取消横向放大，设定高度）
+show_graph = st.button("Toggle Graph Visualization")
 st.subheader("Graph Visualization")
+if show_graph:
 net = Network(height="780px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
 net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
 
@@ -173,30 +175,7 @@ if "RECEIVED" in selected_rels:
 tmp_dir = tempfile.gettempdir()
 html_path = os.path.join(tmp_dir, "graph.html")
 net.write_html(html_path)
-st.components.v1.html(Path(html_path).read_text(), height=790)
-st.components.v1.html('''
-<script type="text/javascript">
-  var nodes = document.querySelectorAll('.vis-network canvas');
-  if (nodes.length > 0) {
-    var canvas = nodes[0];
-    var network = window.network;
-    if (network) {
-      network.on("doubleClick", function(params) {
-        if (params.nodes.length > 0) {
-          var nodeId = params.nodes[0];
-          var node = network.body.nodes[nodeId];
-          if (node.options.hidden) {
-            network.body.nodes[nodeId].options.hidden = false;
-          } else {
-            network.body.nodes[nodeId].options.hidden = true;
-          }
-          network.redraw();
-        }
-      });
-    }
-  }
-</script>
-''', height=0)
+    st.components.v1.html(Path(html_path).read_text(), height=790)
 
 with open(html_path, "rb") as f:
-    st.download_button("Download Graph as HTML", f, file_name="graph_visualization.html")
+        st.download_button("Download Graph as HTML", f, file_name="graph_visualization.html")
