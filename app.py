@@ -108,7 +108,7 @@ st.subheader("Graph Visualization")
 net = Network(height="800px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000")
 net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
 
-# SPEND 聚合后绘制
+# SPEND 聚合（按 packages_title 分组）
 if "SPEND" in selected_rels:
     spend_grouped = filtered_df[
         (filtered_df['type'] == 'Out') & 
@@ -117,26 +117,26 @@ if "SPEND" in selected_rels:
 
     for _, row in spend_grouped.iterrows():
         sender = f"{row['username']}_{row['id']}"
-        tid = f"Target:{row['target_id']}"
+        tid = f"Target:{row['target_id']}_{row['packages_title']}"
         net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
         net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1')
         net.add_edge(sender, tid, label=f'SPEND ({row["ori_amount"]})', color='#AAAAAA')
 
-# TRANSFER 聚合后绘制
+# TRANSFER 聚合（按 title 分组）
 if "TRANSFER" in selected_rels:
     transfer_grouped = filtered_df[
         (filtered_df['type'] == 'Out') & 
         (filtered_df['target_type'].isin(['user', 'egg']))
-    ].groupby(['id', 'username', 'target_id'])['reward_points'].sum().reset_index()
+    ].groupby(['id', 'username', 'target_id', 'title'])['reward_points'].sum().reset_index()
 
     for _, row in transfer_grouped.iterrows():
         sender = f"{row['username']}_{row['id']}"
-        receiver_node = f"User_{row['target_id']}"
+        receiver_node = f"User_{row['target_id']}_{row['title']}"
         net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
-        net.add_node(receiver_node, label=str(row['target_id']), shape='ellipse', color='#E0FFFF')
+        net.add_node(receiver_node, label=row['title'], shape='ellipse', color='#E0FFFF')
         net.add_edge(sender, receiver_node, label=f'TRANSFER ({row["reward_points"]})', color='#AAAAAA')
 
-# RECEIVED 聚合后绘制
+# RECEIVED 聚合（按 title 分组）
 if "RECEIVED" in selected_rels:
     received_grouped = filtered_df[
         (filtered_df['type'] == 'In')
@@ -144,7 +144,7 @@ if "RECEIVED" in selected_rels:
 
     for _, row in received_grouped.iterrows():
         receiver = f"{row['username']}_{row['id']}"
-        source_node = f"Source:{row['target_id']}"
+        source_node = f"Source:{row['target_id']}_{row['title']}"
         net.add_node(receiver, label=row['username'], shape='ellipse', color='#FFF8DC')
         net.add_node(source_node, label=row['title'], shape='box', color='#F0FFF0')
         net.add_edge(source_node, receiver, label=f'RECEIVED ({row["reward_points"]})', color='#AAAAAA')
