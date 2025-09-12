@@ -130,7 +130,7 @@ if "SPEND" in selected_rels:
         edge_title = f"SPEND to {row['packages_title']}<br>Amount: {row['ori_amount']} {row['ori_currency']}"
         net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC', title=sender_title, url=sender_url)
         net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1', title=target_title, url=target_url)
-        net.add_edge(sender, tid, label=f'SPEND ({row["ori_amount"]})', title=edge_title, color='#AAAAAA')
+net.add_edge(sender, tid, label=f'SPEND ({row["ori_amount"]})', title=edge_title, color='#AAAAAA', arrows='to')
 
 # TRANSFER 聚合
 if "TRANSFER" in selected_rels:
@@ -149,7 +149,7 @@ if "TRANSFER" in selected_rels:
         edge_title = f"TRANSFER to user {row['target_id']}<br>Title: {row['title']}<br>Points: {row['reward_points']}"
         net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC', title=sender_title, url=sender_url)
         net.add_node(receiver_node, label=row['title'], shape='ellipse', color='#E0FFFF', title=receiver_title, url=receiver_url)
-        net.add_edge(sender, receiver_node, label=f'TRANSFER ({row["reward_points"]})', title=edge_title, color='#AAAAAA')
+net.add_edge(sender, receiver_node, label=f'TRANSFER ({row["reward_points"]})', title=edge_title, color='#AAAAAA', arrows='to')
 
 # RECEIVED 聚合
 if "RECEIVED" in selected_rels:
@@ -167,7 +167,7 @@ if "RECEIVED" in selected_rels:
         edge_title = f"RECEIVED from source<br>Title: {row['title']}<br>Points: {row['reward_points']}"
         net.add_node(receiver, label=row['username'], shape='ellipse', color='#FFF8DC', title=receiver_title, url=receiver_url)
         net.add_node(source_node, label=row['title'], shape='box', color='#F0FFF0', title=source_title, url=source_url)
-        net.add_edge(source_node, receiver, label=f'RECEIVED ({row["reward_points"]})', title=edge_title, color='#AAAAAA')
+net.add_edge(source_node, receiver, label=f'RECEIVED ({row["reward_points"]})', title=edge_title, color='#AAAAAA', arrows='to')
 
 # 输出图谱 HTML + 下载按钮
 tmp_dir = tempfile.gettempdir()
