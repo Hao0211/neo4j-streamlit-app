@@ -1,31 +1,85 @@
-from pyvis.network import Network
 import streamlit as st
 import pandas as pd
 import os
-import tempfile
 from pathlib import Path
+from pyvis.network import Network
 from neo4j import GraphDatabase
+import tempfile
 import datetime
 
-# Neo4j Aura credentials
-NEO4J_URI = "neo4j+s://2469831c.databases.neo4j.io"
-NEO4J_USERNAME = "neo4j"
-NEO4J_PASSWORD = "VZzJzRBADaHoeLuwJsib9fDY5BbxUW0xCakjjkFJCIk"
+# -------------------------------
+# 🧠 Basic Config
+# -------------------------------
+st.set_page_config(page_title="Reward Graph Dashboard", layout="wide")
+st.title("🏆 Reward Transaction Graph Dashboard")
+
+# Optional password protection
+if "APP_PASSWORD" in st.secrets:
+    password = st.text_input("🔐 Enter access password:", type="password")
+    if password != st.secrets["APP_PASSWORD"]:
+        st.warning("Unauthorized access.")
+        st.stop()
+
+# -------------------------------
+# 🔌 Neo4j Connection
+# -------------------------------
+NEO4J_URI = st.secrets["NEO4J_URI"]
+NEO4J_USERNAME = st.secrets["NEO4J_USERNAME"]
+NEO4J_PASSWORD = st.secrets["NEO4J_PASSWORD"]
+
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
-# CSV 上传
-uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+# -------------------------------
+# 📁 File Upload + Metadata
+# -------------------------------
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+META_PATH = UPLOAD_DIR / "metadata.csv"
+
+if not META_PATH.exists():
+    pd.DataFrame(columns=["filename", "uploaded_at"]).to_csv(META_PATH, index=False)
+
+st.subheader("📤 Upload a new CSV file")
+
+uploaded_file = st.file_uploader("Select your CSV file", type=["csv"])
 if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file, parse_dates=["created_at", "updated_at"])
-    st.success("CSV file loaded successfully.")
-    if "title" in df.columns and "body" in df.columns:
-        st.subheader("Template Preview")
-        st.dataframe(df, height=300, use_container_width=True)
-else:
-    st.warning("Please upload a CSV file to proceed.")
+    save_path = UPLOAD_DIR / uploaded_file.name
+    with open(save_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+
+    meta_df = pd.read_csv(META_PATH)
+    new_entry = pd.DataFrame([{
+        "filename": uploaded_file.name,
+        "uploaded_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }])
+    meta_df = pd.concat([meta_df, new_entry], ignore_index=True)
+    meta_df.drop_duplicates(subset=["filename"], keep="last", inplace=True)
+    meta_df.to_csv(META_PATH, index=False)
+
+    st.success(f"✅ File '{uploaded_file.name}' uploaded successfully!")
+
+# -------------------------------
+# 📂 File Selection
+# -------------------------------
+meta_df = pd.read_csv(META_PATH)
+if len(meta_df) == 0:
+    st.warning("No uploaded files found.")
     st.stop()
 
-# 导入 Neo4j
+st.subheader("📚 Select an existing uploaded CSV")
+selected_filename = st.selectbox(
+    "Choose a file to view",
+    meta_df.sort_values("uploaded_at", ascending=False)["filename"].tolist()
+)
+selected_path = UPLOAD_DIR / selected_filename
+
+df = pd.read_csv(selected_path, parse_dates=["created_at", "updated_at"])
+st.info(f"Loaded: {selected_filename}")
+st.dataframe(df.head(10), use_container_width=True)
+
+# -------------------------------
+# 🧩 Import to Neo4j
+# -------------------------------
 def import_to_neo4j(tx, row):
     tx.run("""
     MERGE (u:User {id: $user_id})
@@ -74,14 +128,20 @@ def import_to_neo4j(tx, row):
         "key_spend": f"{row['target_type']}:{int(row['target_id'])}" if pd.notna(row["target_id"]) else row["title"]
     })
 
-if st.button("Import to Neo4j"):
+if st.button("🚀 Import to Neo4j"):
     with driver.session() as session:
         for _, row in df.iterrows():
             session.write_transaction(import_to_neo4j, row)
     st.success("Data imported into Neo4j successfully.")
 
-# Sidebar filters
-st.sidebar.header("Graph Filters")
+# -------------------------------
+# 🎨 Graph Visualization
+# -------------------------------
+st.subheader("📈 Graph Visualization")
+net = Network(height="780px", width="100%", directed=True, bgcolor="#FFFFFF", font_color="#000")
+
+# Sidebar Filters
+st.sidebar.header("🔍 Filters")
 usernames = df['username'].unique().tolist()
 selected_user = st.sidebar.selectbox("Select username", ["All"] + usernames)
 rel_types = ["TRANSFER", "SPEND", "RECEIVED"]
@@ -90,7 +150,6 @@ today = datetime.date.today()
 two_years_ago = today - datetime.timedelta(days=730)
 date_range = st.sidebar.date_input("Select date range", [two_years_ago, today])
 
-# Filter dataframe
 filtered_df = df.copy()
 if selected_user != "All":
     filtered_df = filtered_df[filtered_df['username'] == selected_user]
@@ -99,12 +158,7 @@ filtered_df = filtered_df[
     (filtered_df['created_at'] <= pd.to_datetime(date_range[1]))
 ]
 
-# 图谱初始化
-st.subheader("Graph Visualization")
-net = Network(height="780px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000", directed=True)
-net.force_atlas_2based(gravity=-50, central_gravity=0.01, spring_length=200, spring_strength=0.08, damping=0.4)
-
-# SPEND
+# Build graph
 if "SPEND" in selected_rels:
     spend_grouped = filtered_df[
         (filtered_df['type'] == 'Out') & (filtered_df['target_type'] == 'rewardslink_payment_gateway')
@@ -114,12 +168,8 @@ if "SPEND" in selected_rels:
         tid = f"Target:{row['target_id']}_{row['packages_title']}"
         net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
         net.add_node(tid, label=row['packages_title'], shape='box', color='#FFE4E1')
-        net.add_edge(sender, tid,
-                     label=f'SPEND ({row["ori_amount"]} {row["ori_currency"]})',
-                     title=f'SPEND {row["ori_amount"]} {row["ori_currency"]} to {row["packages_title"]}',
-                     color='#AAAAAA', arrows='to')
+        net.add_edge(sender, tid, label=f"SPEND ({row['ori_amount']} {row['ori_currency']})", color='#AAAAAA', arrows='to')
 
-# TRANSFER
 if "TRANSFER" in selected_rels:
     transfer_grouped = filtered_df[
         (filtered_df['type'] == 'Out') & (filtered_df['target_type'].isin(['user', 'egg']))
@@ -129,12 +179,8 @@ if "TRANSFER" in selected_rels:
         receiver_node = f"User_{row['target_id']}_{row['title']}"
         net.add_node(sender, label=row['username'], shape='ellipse', color='#FFF8DC')
         net.add_node(receiver_node, label=row['title'], shape='ellipse', color='#E0FFFF')
-        net.add_edge(sender, receiver_node,
-                     label=f'TRANSFER ({row["reward_points"]} points)',
-                     title=f'TRANSFER {row["reward_points"]} reward points to {row["target_id"]}',
-                     color='#AAAAAA', arrows='to')
+        net.add_edge(sender, receiver_node, label=f"TRANSFER ({row['reward_points']} pts)", color='#AAAAAA', arrows='to')
 
-# RECEIVED
 if "RECEIVED" in selected_rels:
     received_grouped = filtered_df[
         (filtered_df['type'] == 'In')
@@ -144,15 +190,10 @@ if "RECEIVED" in selected_rels:
         source_node = f"Source:{row['target_id']}_{row['title']}"
         net.add_node(receiver, label=row['username'], shape='ellipse', color='#FFF8DC')
         net.add_node(source_node, label=row['title'], shape='box', color='#F0FFF0')
-        net.add_edge(source_node, receiver,
-                     label=f'RECEIVED ({row["reward_points"]} points)',
-                     title=f'RECEIVED {row["reward_points"]} reward points from {row["title"]}',
-                     color='#AAAAAA', arrows='to')
+        net.add_edge(source_node, receiver, label=f"RECEIVED ({row['reward_points']} pts)", color='#AAAAAA', arrows='to')
 
-# 输出图谱 HTML
+# Render graph
 tmp_dir = tempfile.gettempdir()
 html_path = os.path.join(tmp_dir, "graph.html")
 net.write_html(html_path)
 st.components.v1.html(Path(html_path).read_text(), height=790)
-with open(html_path, "rb") as f:
-    st.download_button("Download Graph as HTML", f, file_name="graph_visualization.html")
