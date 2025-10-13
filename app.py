@@ -37,7 +37,7 @@ if files:
     if st.sidebar.button("🗑️ Delete selected file"):
         os.remove(UPLOAD_DIR / file_to_delete)
         st.sidebar.success(f"Deleted {file_to_delete}")
-        st.experimental_rerun()
+        st.rerun()
 else:
     st.sidebar.info("No uploaded CSV files yet.")
 
@@ -129,6 +129,36 @@ net.force_atlas_2based(
     damping=0.6
 )
 
+# 调整 PyVis 文字样式：更大、更粗
+net.set_options("""
+var options = {
+  nodes: {
+    font: {
+      size: 22,
+      face: 'Arial',
+      color: '#000000',
+      bold: {
+        color: '#000000',
+        size: 26,
+        vadjust: 0
+      }
+    }
+  },
+  edges: {
+    font: {
+      size: 18,
+      color: '#333333',
+      strokeWidth: 0,
+      strokeColor: '#ffffff'
+    },
+    smooth: true
+  },
+  physics: {
+    enabled: true
+  }
+}
+""")
+
 def fmt_amount(v):
     try:
         if abs(v - round(v)) < 1e-9:
@@ -148,13 +178,13 @@ for _, row in filtered.iterrows():
     label = f"{fmt_amount(total_amt)} ({txn_count})"
 
     if from_user not in nodes_added:
-        net.add_node(from_user, label=from_user, size=18, color="#87CEFA")
+        net.add_node(from_user, label=from_user, size=20, color="#87CEFA")
         nodes_added.add(from_user)
     if to_user not in nodes_added:
-        net.add_node(to_user, label=to_user, size=18, color="#90EE90")
+        net.add_node(to_user, label=to_user, size=22, color="#90EE90")
         nodes_added.add(to_user)
 
-    # 让线条宽阔
+    # 线条宽度随金额变化
     edge_width = max(2, min(10, total_amt / 10000))
     net.add_edge(
         from_user,
@@ -166,8 +196,11 @@ for _, row in filtered.iterrows():
     )
 
 # tracked_username 高亮
-net.add_node(selected_tracked, label=selected_tracked, size=30, color="#FFD700")
+net.add_node(selected_tracked, label=selected_tracked, size=34, color="#FFD700")
 
+# -------------------------------
+# 输出 HTML 图
+# -------------------------------
 tmp_dir = tempfile.gettempdir()
 html_path = os.path.join(tmp_dir, "graph.html")
 net.write_html(html_path)
