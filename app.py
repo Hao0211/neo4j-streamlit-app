@@ -121,7 +121,13 @@ if filtered.empty:
 st.subheader(f"Graph Visualization for '{selected_tracked}'")
 
 net = Network(height="780px", width="100%", bgcolor="#FFFFFF", directed=True)
-net.force_atlas_2based(gravity=-50, central_gravity=0.02, spring_length=150, spring_strength=0.05, damping=0.4)
+net.force_atlas_2based(
+    gravity=-100,
+    central_gravity=0.01,
+    spring_length=220,
+    spring_strength=0.03,
+    damping=0.6
+)
 
 def fmt_amount(v):
     try:
@@ -131,10 +137,9 @@ def fmt_amount(v):
     except Exception:
         return str(v)
 
-# 按 level 排序以构建有层次的关系
 filtered = filtered.sort_values(by=level_col)
-
 nodes_added = set()
+
 for _, row in filtered.iterrows():
     from_user = str(row[from_col])
     to_user = str(row[to_col])
@@ -149,9 +154,18 @@ for _, row in filtered.iterrows():
         net.add_node(to_user, label=to_user, size=18, color="#90EE90")
         nodes_added.add(to_user)
 
-    net.add_edge(from_user, to_user, label=label, title=f"{from_user} → {to_user}\n{label}", color="#666666")
+    # 让线条宽阔
+    edge_width = max(2, min(10, total_amt / 10000))
+    net.add_edge(
+        from_user,
+        to_user,
+        label=label,
+        title=f"{from_user} → {to_user}\n{label}",
+        color="rgba(80,80,80,0.85)",
+        width=edge_width
+    )
 
-# 加入 tracked_username 作为最终接收节点
+# tracked_username 高亮
 net.add_node(selected_tracked, label=selected_tracked, size=30, color="#FFD700")
 
 tmp_dir = tempfile.gettempdir()
