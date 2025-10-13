@@ -8,7 +8,7 @@ import datetime
 from pyvis.network import Network
 
 # ==================================================
-# 🔐 Neo4j Credentials (support both local & Streamlit Cloud)
+# 🔐 Neo4j Credentials (still connect but not import)
 # ==================================================
 NEO4J_URI = st.secrets.get("NEO4J_URI", "neo4j+s://2469831c.databases.neo4j.io")
 NEO4J_USERNAME = st.secrets.get("NEO4J_USERNAME", "neo4j")
@@ -22,8 +22,8 @@ driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 UPLOAD_DIR = Path("uploaded_data")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-st.set_page_config(page_title="Neo4j Transaction Graph", layout="wide")
-st.title("📊 Neo4j Transaction Graph Viewer")
+st.set_page_config(page_title="Transaction Graph Viewer", layout="wide")
+st.title("📊 Transaction Graph Viewer")
 
 # ==================================================
 # 📤 Upload CSV & Save
@@ -61,63 +61,6 @@ csv_path = UPLOAD_DIR / selected_file
 df = pd.read_csv(csv_path, parse_dates=["created_at", "updated_at"])
 st.success(f"Loaded '{selected_file}' successfully.")
 st.dataframe(df, height=300, use_container_width=True)
-
-# ==================================================
-# 🚀 Import to Neo4j
-# ==================================================
-def import_to_neo4j(tx, row):
-    tx.run("""
-    MERGE (u:User {id: $user_id})
-    ON CREATE SET u.username = $username
-    MERGE (tx:Txn {order_id: $order_id})
-    ON CREATE SET tx.title = $title, tx.created_at = datetime($created_at), tx.updated_at = datetime($updated_at)
-    WITH u, tx
-    FOREACH (_ IN CASE WHEN $ttype = 'Out' AND $tgt_type IN ['user','egg'] THEN [1] ELSE [] END |
-        MERGE (v:User {id: $tgt_id})
-        MERGE (u)-[r:TRANSFER {order_id: $order_id}]->(v)
-        ON CREATE SET r.points = $reward_points, r.created_at = datetime($created_at)
-        MERGE (u)-[:HAS_TXN]->(tx)
-        MERGE (tx)-[:TO]->(v)
-    )
-    FOREACH (_ IN CASE WHEN $ttype = 'Out' AND $tgt_type = 'rewardslink_payment_gateway' THEN [1] ELSE [] END |
-        MERGE (t:Target {key: $key_spend})
-        ON CREATE SET t.type = $tgt_type, t.name = $packages_title
-        MERGE (u)-[s:SPEND {order_id: $order_id}]->(t)
-        ON CREATE SET s.amount = $amount, s.currency = $currency, s.ori_amount = $ori_amount, s.ori_currency = $ori_currency, s.created_at = datetime($created_at)
-        MERGE (u)-[:HAS_TXN]->(tx)
-        MERGE (tx)-[:TO]->(t)
-    )
-    FOREACH (_ IN CASE WHEN $ttype = 'In' THEN [1] ELSE [] END |
-        MERGE (src:Source {key: $key_spend})
-        ON CREATE SET src.type = $tgt_type, src.name = $title
-        MERGE (src)-[rin:RECEIVED {order_id: $order_id}]->(u)
-        ON CREATE SET rin.points = $reward_points, rin.created_at = datetime($created_at)
-        MERGE (u)-[:HAS_TXN]->(tx)
-    )
-    """, {
-        "user_id": int(row["id"]),
-        "username": row["username"],
-        "order_id": row["order_id"],
-        "title": row["title"],
-        "packages_title": row["packages_title"],
-        "ttype": row["type"],
-        "tgt_type": row["target_type"],
-        "tgt_id": int(row["target_id"]) if pd.notna(row["target_id"]) else 0,
-        "currency": row["currency"],
-        "amount": float(row["amount"]) if pd.notna(row["amount"]) else 0.0,
-        "ori_currency": row["ori_currency"],
-        "ori_amount": float(row["ori_amount"]) if pd.notna(row["ori_amount"]) else 0.0,
-        "reward_points": float(row["reward_points"]) if pd.notna(row["reward_points"]) else 0.0,
-        "created_at": row["created_at"].strftime('%Y-%m-%dT%H:%M:%S'),
-        "updated_at": row["updated_at"].strftime('%Y-%m-%dT%H:%M:%S'),
-        "key_spend": f"{row['target_type']}:{int(row['target_id'])}" if pd.notna(row["target_id"]) else row["title"]
-    })
-
-if st.button("🚀 Import to Neo4j"):
-    with driver.session() as session:
-        for _, row in df.iterrows():
-            session.write_transaction(import_to_neo4j, row)
-    st.success("Data imported into Neo4j successfully.")
 
 # ==================================================
 # 🧭 Sidebar Filters
@@ -192,10 +135,10 @@ if "RECEIVED" in selected_rels:
                      title=f'RECEIVED {row["reward_points"]} reward points from {row["title"]}',
                      color='#AAAAAA', arrows='to')
 
-# Export & Show Graph
+# ==================================================
+# 💡 Render graph (no download button)
+# ==================================================
 tmp_dir = tempfile.gettempdir()
 html_path = os.path.join(tmp_dir, "graph.html")
 net.write_html(html_path)
 st.components.v1.html(Path(html_path).read_text(), height=790)
-with open(html_path, "rb") as f:
-    st.download_button("📥 Download Graph as HTML", f, file_name="graph_visualization.html")
