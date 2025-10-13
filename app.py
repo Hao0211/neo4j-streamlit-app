@@ -4,6 +4,7 @@ import os
 import tempfile
 from pathlib import Path
 from pyvis.network import Network
+from datetime import datetime, timedelta
 
 # -------------------------------
 # 页面配置
@@ -22,7 +23,6 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 # -------------------------------
 st.sidebar.header("📤 Upload CSV")
 uploaded_file = st.sidebar.file_uploader("Drag and drop or browse to upload CSV", type=["csv"])
-
 if uploaded_file:
     save_path = UPLOAD_DIR / uploaded_file.name
     with open(save_path, "wb") as f:
@@ -32,44 +32,36 @@ if uploaded_file:
 
 st.sidebar.header("📂 Manage files")
 files = sorted([f.name for f in UPLOAD_DIR.glob("*.csv")], reverse=True)
-
 if files:
-    selected_file = st.sidebar.selectbox("Select file to view", files, index=0, key="file_select")
-    st.session_state["selected_file"] = selected_file
-
-    # 删除按钮 + 确认弹窗
+    file_to_delete = st.sidebar.selectbox("Select file to delete", files)
     if st.sidebar.button("🗑️ Delete selected file"):
-        with st.sidebar:
-            st.warning(f"⚠️ Are you sure you want to delete `{selected_file}`?")
-            confirm = st.button("✅ Confirm Delete")
-            cancel = st.button("❌ Cancel")
-            if confirm:
-                os.remove(UPLOAD_DIR / selected_file)
-                st.success(f"Deleted {selected_file}")
-                st.experimental_rerun()
-            elif cancel:
-                st.info("Delete cancelled.")
+        os.remove(UPLOAD_DIR / file_to_delete)
+        st.sidebar.success(f"Deleted {file_to_delete}")
+        st.experimental_rerun()
 else:
     st.sidebar.info("No uploaded CSV files yet.")
-    st.stop()
 
 # -------------------------------
-# 加载 CSV 文件
+# 主区：选择并加载 CSV
 # -------------------------------
-selected_filename = st.session_state.get("selected_file", files[0] if files else None)
-if not selected_filename:
-    st.info("No CSV selected.")
+st.header("📁 Uploaded CSV Files")
+
+files = sorted([f.name for f in UPLOAD_DIR.glob("*.csv")], reverse=True)
+if not files:
+    st.info("No CSV files available. Upload one from the sidebar to begin.")
     st.stop()
 
+selected_filename = st.selectbox("Select an uploaded CSV to load", files, index=0)
 csv_path = UPLOAD_DIR / selected_filename
 
+# 尝试解析并显示部分内容
 try:
     df = pd.read_csv(csv_path)
 except Exception as e:
-    st.error(f"❌ Failed to read CSV: {e}")
+    st.error(f"Failed to read CSV: {e}")
     st.stop()
 
-st.success(f"✅ Loaded: {selected_filename}")
+st.success(f"Loaded: {selected_filename}")
 st.dataframe(df.head(8), use_container_width=True)
 
 # -------------------------------
@@ -91,11 +83,7 @@ level_col = colname("level")
 date_col = colname("last_received_at", "first_received_at", "date")
 
 required = [tracked_col, from_col, to_col, total_amt_col, txn_count_col, level_col]
-missing = [c for c, v in zip(
-    ["tracked_username","from_username","to_username","total_amount_received","distinct_txn_count","level"],
-    required
-) if v is None]
-
+missing = [c for c, v in zip(["tracked_username","from_username","to_username","total_amount_received","distinct_txn_count","level"], required) if v is None]
 if missing:
     st.error(f"CSV missing required columns: {', '.join(missing)}.")
     st.stop()
@@ -104,7 +92,7 @@ if date_col:
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 
 # -------------------------------
-# Sidebar: 过滤器
+# Sidebar: Filters
 # -------------------------------
 st.sidebar.header("🔍 Graph Filters")
 
@@ -130,7 +118,7 @@ if filtered.empty:
 # -------------------------------
 # 绘制 PyVis 图表
 # -------------------------------
-st.markdown("## **Graph Visualization**", unsafe_allow_html=True)
+st.subheader(f"Graph Visualization)
 
 net = Network(height="780px", width="100%", bgcolor="#FFFFFF", directed=True)
 net.force_atlas_2based(
@@ -140,50 +128,6 @@ net.force_atlas_2based(
     spring_strength=0.03,
     damping=0.6
 )
-
-# 设置视觉样式（文字加大加粗）
-net.set_options("""
-{
-  "nodes": {
-    "font": {
-      "size": 20,
-      "face": "arial",
-      "color": "#000000",
-      "bold": true
-    },
-    "shape": "dot",
-    "scaling": {
-      "min": 10,
-      "max": 40
-    }
-  },
-  "edges": {
-    "color": {
-      "color": "rgba(80,80,80,0.7)",
-      "highlight": "rgba(255,0,0,0.8)"
-    },
-    "arrows": {
-      "to": {
-        "enabled": true,
-        "scaleFactor": 0.7
-      }
-    },
-    "smooth": false
-  },
-  "physics": {
-    "enabled": true,
-    "stabilization": {
-      "enabled": true,
-      "iterations": 1000
-    }
-  },
-  "interaction": {
-    "hover": true,
-    "tooltipDelay": 150,
-    "zoomView": true
-  }
-}
-""")
 
 def fmt_amount(v):
     try:
@@ -210,6 +154,7 @@ for _, row in filtered.iterrows():
         net.add_node(to_user, label=to_user, size=18, color="#90EE90")
         nodes_added.add(to_user)
 
+    # 让线条宽阔
     edge_width = max(2, min(10, total_amt / 10000))
     net.add_edge(
         from_user,
@@ -220,7 +165,7 @@ for _, row in filtered.iterrows():
         width=edge_width
     )
 
-# 高亮 tracked 用户
+# tracked_username 高亮
 net.add_node(selected_tracked, label=selected_tracked, size=30, color="#FFD700")
 
 tmp_dir = tempfile.gettempdir()
