@@ -133,7 +133,7 @@ if filtered.empty:
 # 绘制 PyVis 图表
 # -------------------------------
 st.markdown(
-    f"<h2 style='font-weight: 800; font-size: 28px;'>📈 Graph Visualization for <span style=\"color:#FFD700\">{selected_tracked}</span></h2>",
+    f"<h2 style='font-weight: 800; font-size: 28px;'>📈 Graph Visualization for <span style=\"color:#CCAC93\">{selected_tracked}</span></h2>",
     unsafe_allow_html=True
 )
 
