@@ -4,7 +4,6 @@ import os
 import tempfile
 from pathlib import Path
 from pyvis.network import Network
-from datetime import datetime, timedelta
 
 # -------------------------------
 # 页面配置
@@ -23,6 +22,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 # -------------------------------
 st.sidebar.header("📤 Upload CSV")
 uploaded_file = st.sidebar.file_uploader("Drag and drop or browse to upload CSV", type=["csv"])
+
 if uploaded_file:
     save_path = UPLOAD_DIR / uploaded_file.name
     with open(save_path, "wb") as f:
@@ -32,36 +32,44 @@ if uploaded_file:
 
 st.sidebar.header("📂 Manage files")
 files = sorted([f.name for f in UPLOAD_DIR.glob("*.csv")], reverse=True)
+
 if files:
-    file_to_delete = st.sidebar.selectbox("Select file to delete", files)
+    selected_file = st.sidebar.selectbox("Select file to view", files, index=0, key="file_select")
+    st.session_state["selected_file"] = selected_file
+
+    # 删除按钮 + 确认弹窗
     if st.sidebar.button("🗑️ Delete selected file"):
-        os.remove(UPLOAD_DIR / file_to_delete)
-        st.sidebar.success(f"Deleted {file_to_delete}")
-        st.rerun()
+        with st.sidebar:
+            st.warning(f"⚠️ Are you sure you want to delete `{selected_file}`?")
+            confirm = st.button("✅ Confirm Delete")
+            cancel = st.button("❌ Cancel")
+            if confirm:
+                os.remove(UPLOAD_DIR / selected_file)
+                st.success(f"Deleted {selected_file}")
+                st.experimental_rerun()
+            elif cancel:
+                st.info("Delete cancelled.")
 else:
     st.sidebar.info("No uploaded CSV files yet.")
-
-# -------------------------------
-# 主区：选择并加载 CSV
-# -------------------------------
-st.header("📁 Uploaded CSV Files")
-
-files = sorted([f.name for f in UPLOAD_DIR.glob("*.csv")], reverse=True)
-if not files:
-    st.info("No CSV files available. Upload one from the sidebar to begin.")
     st.stop()
 
-selected_filename = st.selectbox("Select an uploaded CSV to load", files, index=0)
+# -------------------------------
+# 加载 CSV 文件
+# -------------------------------
+selected_filename = st.session_state.get("selected_file", files[0] if files else None)
+if not selected_filename:
+    st.info("No CSV selected.")
+    st.stop()
+
 csv_path = UPLOAD_DIR / selected_filename
 
-# 尝试解析并显示部分内容
 try:
     df = pd.read_csv(csv_path)
 except Exception as e:
-    st.error(f"Failed to read CSV: {e}")
+    st.error(f"❌ Failed to read CSV: {e}")
     st.stop()
 
-st.success(f"Loaded: {selected_filename}")
+st.success(f"✅ Loaded: {selected_filename}")
 st.dataframe(df.head(8), use_container_width=True)
 
 # -------------------------------
@@ -83,7 +91,11 @@ level_col = colname("level")
 date_col = colname("last_received_at", "first_received_at", "date")
 
 required = [tracked_col, from_col, to_col, total_amt_col, txn_count_col, level_col]
-missing = [c for c, v in zip(["tracked_username","from_username","to_username","total_amount_received","distinct_txn_count","level"], required) if v is None]
+missing = [c for c, v in zip(
+    ["tracked_username","from_username","to_username","total_amount_received","distinct_txn_count","level"],
+    required
+) if v is None]
+
 if missing:
     st.error(f"CSV missing required columns: {', '.join(missing)}.")
     st.stop()
@@ -92,7 +104,7 @@ if date_col:
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 
 # -------------------------------
-# Sidebar: Filters
+# Sidebar: 过滤器
 # -------------------------------
 st.sidebar.header("🔍 Graph Filters")
 
@@ -118,7 +130,7 @@ if filtered.empty:
 # -------------------------------
 # 绘制 PyVis 图表
 # -------------------------------
-st.subheader(f"Graph Visualization for '{selected_tracked}'")
+st.markdown("## **Graph Visualization**", unsafe_allow_html=True)
 
 net = Network(height="780px", width="100%", bgcolor="#FFFFFF", directed=True)
 net.force_atlas_2based(
@@ -129,32 +141,46 @@ net.force_atlas_2based(
     damping=0.6
 )
 
-# 调整 PyVis 文字样式：更大、更粗
+# 设置视觉样式（文字加大加粗）
 net.set_options("""
-var options = {
-  nodes: {
-    font: {
-      size: 22,
-      face: 'Arial',
-      color: '#000000',
-      bold: {
-        color: '#000000',
-        size: 26,
-        vadjust: 0
-      }
+{
+  "nodes": {
+    "font": {
+      "size": 20,
+      "face": "arial",
+      "color": "#000000",
+      "bold": true
+    },
+    "shape": "dot",
+    "scaling": {
+      "min": 10,
+      "max": 40
     }
   },
-  edges: {
-    font: {
-      size: 18,
-      color: '#333333',
-      strokeWidth: 0,
-      strokeColor: '#ffffff'
+  "edges": {
+    "color": {
+      "color": "rgba(80,80,80,0.7)",
+      "highlight": "rgba(255,0,0,0.8)"
     },
-    smooth: true
+    "arrows": {
+      "to": {
+        "enabled": true,
+        "scaleFactor": 0.7
+      }
+    },
+    "smooth": false
   },
-  physics: {
-    enabled: true
+  "physics": {
+    "enabled": true,
+    "stabilization": {
+      "enabled": true,
+      "iterations": 1000
+    }
+  },
+  "interaction": {
+    "hover": true,
+    "tooltipDelay": 150,
+    "zoomView": true
   }
 }
 """)
@@ -178,13 +204,12 @@ for _, row in filtered.iterrows():
     label = f"{fmt_amount(total_amt)} ({txn_count})"
 
     if from_user not in nodes_added:
-        net.add_node(from_user, label=from_user, size=20, color="#87CEFA")
+        net.add_node(from_user, label=from_user, size=18, color="#87CEFA")
         nodes_added.add(from_user)
     if to_user not in nodes_added:
-        net.add_node(to_user, label=to_user, size=22, color="#90EE90")
+        net.add_node(to_user, label=to_user, size=18, color="#90EE90")
         nodes_added.add(to_user)
 
-    # 线条宽度随金额变化
     edge_width = max(2, min(10, total_amt / 10000))
     net.add_edge(
         from_user,
@@ -195,12 +220,9 @@ for _, row in filtered.iterrows():
         width=edge_width
     )
 
-# tracked_username 高亮
-net.add_node(selected_tracked, label=selected_tracked, size=34, color="#FFD700")
+# 高亮 tracked 用户
+net.add_node(selected_tracked, label=selected_tracked, size=30, color="#FFD700")
 
-# -------------------------------
-# 输出 HTML 图
-# -------------------------------
 tmp_dir = tempfile.gettempdir()
 html_path = os.path.join(tmp_dir, "graph.html")
 net.write_html(html_path)
