@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 # 页面配置
 # -------------------------------
 st.set_page_config(page_title="Transaction Graph Viewer", layout="wide")
-st.title("💹 Transaction Graph Viewer")
+st.title("📊 Transaction Graph Viewer")
 
 # -------------------------------
 # 上传文件目录（多人共享）
