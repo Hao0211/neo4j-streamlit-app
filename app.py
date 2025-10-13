@@ -1,105 +1,160 @@
-import os
 import streamlit as st
 import pandas as pd
+import os
+import tempfile
+from pathlib import Path
 from pyvis.network import Network
-import streamlit.components.v1 as components
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Neo4j Graph Viewer", layout="wide")
+# -------------------------------
+# 页面配置
+# -------------------------------
+st.set_page_config(page_title="Transaction Graph Viewer", layout="wide")
+st.title("📊 Transaction Graph Viewer")
 
-# ========== 初始化 session state ==========
-if "current_file" not in st.session_state:
-    st.session_state.current_file = None
-if "confirm_delete" not in st.session_state:
-    st.session_state.confirm_delete = False
+# -------------------------------
+# 上传文件目录（多人共享）
+# -------------------------------
+UPLOAD_DIR = Path("uploaded_data")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
-DATA_DIR = "data"
-os.makedirs(DATA_DIR, exist_ok=True)
+# -------------------------------
+# Sidebar: 上传与文件管理
+# -------------------------------
+st.sidebar.header("📤 Upload CSV")
+uploaded_file = st.sidebar.file_uploader("Drag and drop or browse to upload CSV", type=["csv"])
+if uploaded_file:
+    save_path = UPLOAD_DIR / uploaded_file.name
+    with open(save_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    st.sidebar.success(f"✅ Saved: {uploaded_file.name}")
+    st.session_state["selected_file"] = uploaded_file.name
 
-# ========== 侧边栏文件管理 ==========
-st.sidebar.header("📂 Manage Files")
-
-# 获取 CSV 文件列表
-csv_files = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
-
-selected_file = st.sidebar.selectbox("Select CSV File", csv_files, index=0 if csv_files else None)
-
-# 当切换文件时自动载入
-if selected_file and selected_file != st.session_state.current_file:
-    st.session_state.current_file = selected_file
-
-# 删除按钮
-if selected_file:
+st.sidebar.header("📂 Manage files")
+files = sorted([f.name for f in UPLOAD_DIR.glob("*.csv")], reverse=True)
+if files:
+    file_to_delete = st.sidebar.selectbox("Select file to delete", files)
     if st.sidebar.button("🗑️ Delete selected file"):
-        st.session_state.confirm_delete = True
-
-# 删除确认弹窗
-if st.session_state.confirm_delete:
-    st.dialog("⚠️ Confirm Deletion")  # ✅ 使用 dialog 而不是 modal
-    st.write(f"Are you sure you want to delete **{st.session_state.current_file}**?")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("✅ Yes, delete"):
-            try:
-                os.remove(os.path.join(DATA_DIR, st.session_state.current_file))
-                st.success(f"File **{st.session_state.current_file}** deleted successfully.")
-                st.session_state.current_file = None
-            except Exception as e:
-                st.error(f"Error deleting file: {e}")
-            st.session_state.confirm_delete = False
-            st.experimental_rerun()
-    with col2:
-        if st.button("❌ Cancel"):
-            st.session_state.confirm_delete = False
-            st.experimental_rerun()
-
-# ========== 加载 CSV 数据 ==========
-if st.session_state.current_file:
-    file_path = os.path.join(DATA_DIR, st.session_state.current_file)
-    df = pd.read_csv(file_path)
-    st.subheader(f"📄 Loaded File: {st.session_state.current_file}")
-    st.dataframe(df.head())
+        os.remove(UPLOAD_DIR / file_to_delete)
+        st.sidebar.success(f"Deleted {file_to_delete}")
+        st.experimental_rerun()
 else:
-    st.warning("Please select or upload a CSV file first.")
+    st.sidebar.info("No uploaded CSV files yet.")
+
+# -------------------------------
+# 主区：选择并加载 CSV
+# -------------------------------
+st.header("📁 Uploaded CSV Files")
+
+files = sorted([f.name for f in UPLOAD_DIR.glob("*.csv")], reverse=True)
+if not files:
+    st.info("No CSV files available. Upload one from the sidebar to begin.")
     st.stop()
 
-# ========== 图形参数 ==========
-st.sidebar.header("🧠 Graph Settings")
-from_col = st.sidebar.selectbox("From column", df.columns)
-to_col = st.sidebar.selectbox("To column", df.columns)
-level_col = st.sidebar.selectbox("Optional Level column (for sorting)", [None] + list(df.columns))
+selected_filename = st.selectbox("Select an uploaded CSV to load", files, index=0)
+csv_path = UPLOAD_DIR / selected_filename
 
-# ========== 图形可视化 ==========
-st.header("📊 Graph Visualization")
-
+# 尝试解析并显示部分内容
 try:
-    agg = df.groupby([from_col, to_col]).size().reset_index(name="count")
-
-    # ✅ 修复 AttributeError (排序安全)
-    if level_col:
-        sort_by = [level_col] if isinstance(level_col, str) else level_col
-        try:
-            last_to = str(agg.sort_values(by=sort_by).iloc[-1][to_col])
-        except Exception:
-            last_to = None
-    else:
-        last_to = None
-
-    # 创建网络图
-    net = Network(height="650px", width="100%", bgcolor="#FFFFFF", font_color="black", directed=True)
-
-    # 添加节点和边
-    for _, row in agg.iterrows():
-        net.add_node(row[from_col], label=row[from_col])
-        net.add_node(row[to_col], label=row[to_col])
-        net.add_edge(row[from_col], row[to_col], title=f"Count: {row['count']}")
-
-    if last_to:
-        net.add_node(last_to, color="red", shape="star", size=25)
-
-    net.repulsion(node_distance=180, spring_length=200)
-    net.save_graph("graph.html")
-
-    components.html(open("graph.html", "r", encoding="utf-8").read(), height=700)
-
+    df = pd.read_csv(csv_path)
 except Exception as e:
-    st.error(f"Graph generation failed: {e}")
+    st.error(f"Failed to read CSV: {e}")
+    st.stop()
+
+st.success(f"Loaded: {selected_filename}")
+st.dataframe(df.head(8), use_container_width=True)
+
+# -------------------------------
+# 列名检查
+# -------------------------------
+col_map = {c.lower(): c for c in df.columns}
+def colname(*candidates):
+    for c in candidates:
+        if c.lower() in col_map:
+            return col_map[c.lower()]
+    return None
+
+tracked_col = colname("tracked_username")
+from_col = colname("from_username")
+to_col = colname("to_username")
+total_amt_col = colname("total_amount_received")
+txn_count_col = colname("distinct_txn_count")
+level_col = colname("level")
+date_col = colname("last_received_at", "first_received_at", "date")
+
+required = [tracked_col, from_col, to_col, total_amt_col, txn_count_col, level_col]
+missing = [c for c, v in zip(["tracked_username","from_username","to_username","total_amount_received","distinct_txn_count","level"], required) if v is None]
+if missing:
+    st.error(f"CSV missing required columns: {', '.join(missing)}.")
+    st.stop()
+
+if date_col:
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+
+# -------------------------------
+# Sidebar: Filters
+# -------------------------------
+st.sidebar.header("🔍 Graph Filters")
+
+tracked_candidates = sorted(df[tracked_col].dropna().astype(str).unique().tolist())
+selected_tracked = st.sidebar.selectbox("Filter · tracked_username", tracked_candidates, index=0)
+
+if date_col and df[date_col].notna().any():
+    min_date = df[date_col].min().date()
+    max_date = df[date_col].max().date()
+    date_range = st.sidebar.date_input("Select date range", [min_date, max_date])
+    start_ts = pd.to_datetime(date_range[0])
+    end_ts = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1)
+    df = df[(df[date_col] >= start_ts) & (df[date_col] < end_ts)]
+
+# -------------------------------
+# 根据 tracked_username 过滤数据
+# -------------------------------
+filtered = df[df[tracked_col] == selected_tracked].copy()
+if filtered.empty:
+    st.warning("No data for selected tracked_username.")
+    st.stop()
+
+# -------------------------------
+# 绘制 PyVis 图表
+# -------------------------------
+st.subheader(f"Graph Visualization for '{selected_tracked}'")
+
+net = Network(height="780px", width="100%", bgcolor="#FFFFFF", directed=True)
+net.force_atlas_2based(gravity=-50, central_gravity=0.02, spring_length=150, spring_strength=0.05, damping=0.4)
+
+def fmt_amount(v):
+    try:
+        if abs(v - round(v)) < 1e-9:
+            return f"{int(round(v))}RP"
+        return f"{v:,.2f}RP"
+    except Exception:
+        return str(v)
+
+# 按 level 排序以构建有层次的关系
+filtered = filtered.sort_values(by=level_col)
+
+nodes_added = set()
+for _, row in filtered.iterrows():
+    from_user = str(row[from_col])
+    to_user = str(row[to_col])
+    total_amt = float(row[total_amt_col]) if pd.notna(row[total_amt_col]) else 0.0
+    txn_count = int(row[txn_count_col]) if pd.notna(row[txn_count_col]) else 0
+    label = f"{fmt_amount(total_amt)} ({txn_count})"
+
+    if from_user not in nodes_added:
+        net.add_node(from_user, label=from_user, size=18, color="#87CEFA")
+        nodes_added.add(from_user)
+    if to_user not in nodes_added:
+        net.add_node(to_user, label=to_user, size=18, color="#90EE90")
+        nodes_added.add(to_user)
+
+    net.add_edge(from_user, to_user, label=label, title=f"{from_user} → {to_user}\n{label}", color="#666666")
+
+# 加入 tracked_username 作为最终接收节点
+net.add_node(selected_tracked, label=selected_tracked, size=30, color="#FFD700")
+
+tmp_dir = tempfile.gettempdir()
+html_path = os.path.join(tmp_dir, "graph.html")
+net.write_html(html_path)
+st.components.v1.html(Path(html_path).read_text(), height=790)
