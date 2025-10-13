@@ -65,135 +65,94 @@ st.success(f"Loaded: {selected_filename}")
 st.dataframe(df.head(8), use_container_width=True)
 
 # -------------------------------
-# 预处理：确认并规范列
+# 列名检查
 # -------------------------------
 col_map = {c.lower(): c for c in df.columns}
-
 def colname(*candidates):
     for c in candidates:
-        if c in col_map:
-            return col_map[c]
         if c.lower() in col_map:
             return col_map[c.lower()]
     return None
 
-tracked_col = colname("tracked_username", "tracked_user", "tracked")
-from_col = colname("from_username", "from_user", "from")
-total_amt_col = colname("total_amount_received", "total_amount", "amount", "total_received")
-txn_count_col = colname("distinct_txn_count", "txn_count", "distinct_count", "count")
-first_date_col = colname("first_received_at", "first_received", "first_date")
-last_date_col = colname("last_received_at", "last_received", "last_date", "date")
+tracked_col = colname("tracked_username")
+from_col = colname("from_username")
+to_col = colname("to_username")
+total_amt_col = colname("total_amount_received")
+txn_count_col = colname("distinct_txn_count")
+level_col = colname("level")
+date_col = colname("last_received_at", "first_received_at", "date")
 
-missing = []
-for name, var in [
-    ("tracked_username", tracked_col),
-    ("from_username", from_col),
-    ("total_amount_received", total_amt_col),
-    ("distinct_txn_count", txn_count_col)
-]:
-    if var is None:
-        missing.append(name)
-
+required = [tracked_col, from_col, to_col, total_amt_col, txn_count_col, level_col]
+missing = [c for c, v in zip(["tracked_username","from_username","to_username","total_amount_received","distinct_txn_count","level"], required) if v is None]
 if missing:
     st.error(f"CSV missing required columns: {', '.join(missing)}.")
     st.stop()
 
-date_col = last_date_col or first_date_col
 if date_col:
-    try:
-        df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-    except Exception:
-        df[date_col] = pd.to_datetime(df[date_col].astype(str), errors="coerce")
-else:
-    df["__noop_date__"] = pd.NaT
-    date_col = "__noop_date__"
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 
 # -------------------------------
-# Sidebar: Graph filters
+# Sidebar: Filters
 # -------------------------------
 st.sidebar.header("🔍 Graph Filters")
 
-tracked_candidates = df[tracked_col].dropna().astype(str).unique().tolist()
-tracked_candidates_sorted = sorted(tracked_candidates)
-if not tracked_candidates_sorted:
-    st.sidebar.error("No tracked_username values found.")
-    st.stop()
+tracked_candidates = sorted(df[tracked_col].dropna().astype(str).unique().tolist())
+selected_tracked = st.sidebar.selectbox("Filter · tracked_username", tracked_candidates, index=0)
 
-selected_tracked = st.sidebar.selectbox("Filter · tracked_username", ["All"] + tracked_candidates_sorted, index=0)
-
-today = datetime.today().date()
-two_years_ago = today - timedelta(days=730)
-if df[date_col].notna().any():
+if date_col and df[date_col].notna().any():
     min_date = df[date_col].min().date()
     max_date = df[date_col].max().date()
-    default_start = max(two_years_ago, min_date)
-    default_end = max_date
-    date_range = st.sidebar.date_input("Select date range", [default_start, default_end])
+    date_range = st.sidebar.date_input("Select date range", [min_date, max_date])
     start_ts = pd.to_datetime(date_range[0])
-    end_ts = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-else:
-    st.sidebar.info("No date column found — date filtering disabled.")
-    start_ts = None
-    end_ts = None
+    end_ts = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1)
+    df = df[(df[date_col] >= start_ts) & (df[date_col] < end_ts)]
 
 # -------------------------------
-# 过滤数据
+# 根据 tracked_username 过滤数据
 # -------------------------------
-filtered = df.copy()
-if selected_tracked != "All":
-    filtered = filtered[filtered[tracked_col].astype(str) == str(selected_tracked)]
-if start_ts is not None and end_ts is not None:
-    filtered = filtered[(filtered[date_col] >= start_ts) & (filtered[date_col] <= end_ts)]
-
+filtered = df[df[tracked_col] == selected_tracked].copy()
 if filtered.empty:
-    st.warning("No records match the selected filters.")
+    st.warning("No data for selected tracked_username.")
     st.stop()
 
 # -------------------------------
-# 聚合数据
+# 绘制 PyVis 图表
 # -------------------------------
-agg = (
-    filtered
-    .groupby([tracked_col, from_col], dropna=True, as_index=False)
-    .agg({
-        total_amt_col: "sum",
-        txn_count_col: "sum"
-    })
-)
+st.subheader(f"Graph Visualization for '{selected_tracked}'")
 
-tracked_values_in_data = agg[tracked_col].unique().tolist()
-
-# -------------------------------
-# 建立 PyVis 图表
-# -------------------------------
-st.subheader("Graph Visualization")
-
-net = Network(height="780px", width="100%", notebook=False, bgcolor="#FFFFFF", font_color="#000000", directed=True)
+net = Network(height="780px", width="100%", bgcolor="#FFFFFF", directed=True)
 net.force_atlas_2based(gravity=-50, central_gravity=0.02, spring_length=150, spring_strength=0.05, damping=0.4)
 
 def fmt_amount(v):
     try:
         if abs(v - round(v)) < 1e-9:
-            return f"{int(round(v)):,}"
-        return f"{v:,.2f}"
+            return f"{int(round(v))}RP"
+        return f"{v:,.2f}RP"
     except Exception:
         return str(v)
 
-for tracked in tracked_values_in_data:
-    center_id = f"tracked::{tracked}"
-    net.add_node(center_id, label=str(tracked), title=f"Tracked: {tracked}", size=30, color="#FFD700")
-    sub = agg[agg[tracked_col].astype(str) == str(tracked)]
-    for _, r in sub.iterrows():
-        from_user = str(r[from_col])
-        from_id = f"from::{from_user}"
-        total_amt = float(r[total_amt_col]) if pd.notna(r[total_amt_col]) else 0.0
-        txn_count = int(r[txn_count_col]) if pd.notna(r[txn_count_col]) else 0
-        label = f"{fmt_amount(total_amt)} ({txn_count})"
-        net.add_node(from_id, label=from_user, size=18, color="#87CEFA")
-        net.add_edge(from_id, center_id, label=label, title=f"{from_user} → {tracked}\n{label}", arrows="to", color="#666666")
+# 按 level 排序以构建有层次的关系
+filtered = filtered.sort_values(by=level_col)
 
-if len(tracked_values_in_data) == 1:
-    net.toggle_physics(True)
+nodes_added = set()
+for _, row in filtered.iterrows():
+    from_user = str(row[from_col])
+    to_user = str(row[to_col])
+    total_amt = float(row[total_amt_col]) if pd.notna(row[total_amt_col]) else 0.0
+    txn_count = int(row[txn_count_col]) if pd.notna(row[txn_count_col]) else 0
+    label = f"{fmt_amount(total_amt)} ({txn_count})"
+
+    if from_user not in nodes_added:
+        net.add_node(from_user, label=from_user, size=18, color="#87CEFA")
+        nodes_added.add(from_user)
+    if to_user not in nodes_added:
+        net.add_node(to_user, label=to_user, size=18, color="#90EE90")
+        nodes_added.add(to_user)
+
+    net.add_edge(from_user, to_user, label=label, title=f"{from_user} → {to_user}\n{label}", color="#666666")
+
+# 加入 tracked_username 作为最终接收节点
+net.add_node(selected_tracked, label=selected_tracked, size=30, color="#FFD700")
 
 tmp_dir = tempfile.gettempdir()
 html_path = os.path.join(tmp_dir, "graph.html")
