@@ -185,9 +185,11 @@ for _, row in filtered.iterrows():
 # 高亮 tracked_username
 net.add_node(selected_tracked, label=selected_tracked, size=35, color="#FFD700", font={"size": 26, "bold": True})
 
-# 输出 HTML
-tmp_dir = tempfile.gettempdir()
-html_path = os.path.join(tmp_dir, "graph.html")
-net.write_html(html_path)
-st.components.v1.html(Path(html_path).read_text(), height=820)
- 
+# -------------------------------
+# ✅ 修正的安全输出方式（不写入文件）
+# -------------------------------
+try:
+    html_str = net.generate_html()  # 直接生成 HTML 字符串
+    st.components.v1.html(html_str, height=820, scrolling=True)
+except Exception as e:
+    st.error(f"Graph rendering failed: {e}")
