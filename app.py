@@ -1,82 +1,62 @@
 import streamlit as st
 import pandas as pd
-import os
 import tempfile
 from pathlib import Path
 from pyvis.network import Network
-from datetime import datetime, timedelta
+import requests
 
-# -------------------------------
-# 页面配置
-# -------------------------------
+# =========================================================
+# 🔧 GitHub Repo 设定
+# =========================================================
+GITHUB_USER = "Hao0211"
+GITHUB_REPO = "neo4j-streamlit-app"
+DATA_FOLDER = "data"     # 你在 GitHub 里存 CSV 的目录
+BRANCH = "main"
+# =========================================================
+
 st.set_page_config(page_title="Transaction Graph Viewer", layout="wide")
 st.title("📊 Transaction Graph Viewer")
 
-# -------------------------------
-# 上传文件目录（多人共享）
-# -------------------------------
-UPLOAD_DIR = Path("uploaded_data")
-UPLOAD_DIR.mkdir(exist_ok=True)
+# =========================================================
+# 📂 从 GitHub 读取 CSV 列表
+# =========================================================
+@st.cache_data(ttl=300)
+def list_github_files():
+    """列出 GitHub data/ 目录下所有 CSV 文件"""
+    api_url = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{DATA_FOLDER}?ref={BRANCH}"
+    r = requests.get(api_url)
+    if r.status_code != 200:
+        st.error("❌ 无法读取 GitHub 文件列表，请确认仓库是 public 并存在 data 文件夹。")
+        return []
+    return [item["name"] for item in r.json() if item["name"].endswith(".csv")]
 
-# -------------------------------
-# Sidebar: 上传与文件管理
-# -------------------------------
-st.sidebar.header("📤 Upload CSV")
-uploaded_file = st.sidebar.file_uploader("Drag and drop or browse to upload CSV", type=["csv"])
-if uploaded_file:
-    save_path = UPLOAD_DIR / uploaded_file.name
-    with open(save_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    st.sidebar.success(f"✅ Saved: {uploaded_file.name}")
-    st.session_state["selected_file"] = uploaded_file.name
+# =========================================================
+# 📥 从 GitHub 下载并载入 CSV
+# =========================================================
+@st.cache_data(ttl=300)
+def load_github_csv(filename):
+    """从 GitHub raw 链接读取 CSV 内容"""
+    raw_url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/{BRANCH}/{DATA_FOLDER}/{filename}"
+    df = pd.read_csv(raw_url)
+    return df
 
-st.sidebar.header("📂 Manage files")
-files = sorted([f.name for f in UPLOAD_DIR.glob("*.csv")], reverse=True)
-if files:
-    file_to_delete = st.sidebar.selectbox("Select file to delete", files)
-
-    # 删除确认弹窗
-    if st.sidebar.button("🗑️ Delete selected file"):
-        with st.sidebar:
-            st.warning(f"⚠️ Are you sure you want to delete `{file_to_delete}`?")
-            confirm = st.button("✅ Yes, delete permanently")
-            cancel = st.button("❌ Cancel")
-
-            if confirm:
-                os.remove(UPLOAD_DIR / file_to_delete)
-                st.success(f"Deleted {file_to_delete}")
-                st.experimental_rerun()
-            elif cancel:
-                st.info("Deletion cancelled.")
-else:
-    st.sidebar.info("No uploaded CSV files yet.")
-
-# -------------------------------
-# 主区：选择并加载 CSV
-# -------------------------------
-st.header("📁 Uploaded CSV Files")
-
-files = sorted([f.name for f in UPLOAD_DIR.glob("*.csv")], reverse=True)
+# =========================================================
+# 🧭 文件选择
+# =========================================================
+files = list_github_files()
 if not files:
-    st.info("No CSV files available. Upload one from the sidebar to begin.")
+    st.warning("⚠️ 还没有上传 CSV 文件，请先在 GitHub 的 data 文件夹上传。")
     st.stop()
 
-selected_filename = st.selectbox("Select an uploaded CSV to load", files, index=0)
-csv_path = UPLOAD_DIR / selected_filename
-
-# 尝试解析并显示部分内容
-try:
-    df = pd.read_csv(csv_path)
-except Exception as e:
-    st.error(f"Failed to read CSV: {e}")
-    st.stop()
-
+selected_filename = st.selectbox("Select a CSV file to load", files, index=0)
 st.success(f"✅ Loaded: {selected_filename}")
+
+df = load_github_csv(selected_filename)
 st.dataframe(df.head(8), use_container_width=True)
 
-# -------------------------------
-# 列名检查
-# -------------------------------
+# =========================================================
+# 🧩 列名自动匹配
+# =========================================================
 col_map = {c.lower(): c for c in df.columns}
 def colname(*candidates):
     for c in candidates:
@@ -99,15 +79,15 @@ missing = [c for c, v in zip(
 ) if v is None]
 
 if missing:
-    st.error(f"CSV missing required columns: {', '.join(missing)}.")
+    st.error(f"❌ CSV 缺少必要栏位: {', '.join(missing)}")
     st.stop()
 
 if date_col:
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 
-# -------------------------------
-# Sidebar: Filters
-# -------------------------------
+# =========================================================
+# 🎛️ Sidebar 筛选
+# =========================================================
 st.sidebar.header("🔍 Graph Filters")
 
 tracked_candidates = sorted(df[tracked_col].dropna().astype(str).unique().tolist())
@@ -121,17 +101,14 @@ if date_col and df[date_col].notna().any():
     end_ts = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1)
     df = df[(df[date_col] >= start_ts) & (df[date_col] < end_ts)]
 
-# -------------------------------
-# 根据 tracked_username 过滤数据
-# -------------------------------
 filtered = df[df[tracked_col] == selected_tracked].copy()
 if filtered.empty:
-    st.warning("No data for selected tracked_username.")
+    st.warning("⚠️ 没有符合条件的数据。")
     st.stop()
 
-# -------------------------------
-# 绘制 PyVis 图表
-# -------------------------------
+# =========================================================
+# 🎨 绘制 PyVis 图表
+# =========================================================
 st.markdown(
     f"<h2 style='font-weight: 800; font-size: 28px;'>📈 Graph Visualization for <span style=\"color:#B8B8B8\">{selected_tracked}</span></h2>",
     unsafe_allow_html=True
@@ -171,7 +148,6 @@ for _, row in filtered.iterrows():
         net.add_node(to_user, label=to_user, size=20, color="#90EE90", font={"size": 22, "bold": True})
         nodes_added.add(to_user)
 
-    # 线条粗细根据金额变化
     edge_width = max(2, min(12, total_amt / 10000))
     net.add_edge(
         from_user,
@@ -187,6 +163,6 @@ net.add_node(selected_tracked, label=selected_tracked, size=35, color="#FFD700",
 
 # 输出 HTML
 tmp_dir = tempfile.gettempdir()
-html_path = os.path.join(tmp_dir, "graph.html")
+html_path = Path(tmp_dir) / "graph.html"
 net.write_html(html_path)
-st.components.v1.html(Path(html_path).read_text(), height=820)
+st.components.v1.html(html_path.read_text(), height=820)
