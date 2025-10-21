@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
-import os
-import tempfile
+import requests
 from pathlib import Path
 from pyvis.network import Network
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # -------------------------------
 # 页面配置
@@ -13,69 +12,54 @@ st.set_page_config(page_title="Transaction Graph Viewer", layout="wide")
 st.title("📊 Transaction Graph Viewer")
 
 # -------------------------------
-# 上传文件目录（多人共享）
+# GitHub 仓库设置
 # -------------------------------
-UPLOAD_DIR = Path("uploaded_data")
-UPLOAD_DIR.mkdir(exist_ok=True)
-
-# -------------------------------
-# Sidebar: 上传与文件管理
-# -------------------------------
-st.sidebar.header("📤 Upload CSV")
-uploaded_file = st.sidebar.file_uploader("Drag and drop or browse to upload CSV", type=["csv"])
-if uploaded_file:
-    save_path = UPLOAD_DIR / uploaded_file.name
-    with open(save_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    st.sidebar.success(f"✅ Saved: {uploaded_file.name}")
-    st.session_state["selected_file"] = uploaded_file.name
-
-st.sidebar.header("📂 Manage files")
-files = sorted([f.name for f in UPLOAD_DIR.glob("*.csv")], reverse=True)
-if files:
-    file_to_delete = st.sidebar.selectbox("Select file to delete", files)
-
-    # 删除确认弹窗
-    if st.sidebar.button("🗑️ Delete selected file"):
-        with st.sidebar:
-            st.warning(f"⚠️ Are you sure you want to delete `{file_to_delete}`?")
-            confirm = st.button("✅ Yes, delete permanently")
-            cancel = st.button("❌ Cancel")
-
-            if confirm:
-                os.remove(UPLOAD_DIR / file_to_delete)
-                st.success(f"Deleted {file_to_delete}")
-                st.experimental_rerun()
-            elif cancel:
-                st.info("Deletion cancelled.")
-else:
-    st.sidebar.info("No uploaded CSV files yet.")
+GITHUB_RAW_BASE = "https://raw.githubusercontent.com/Hao0211/neo4j-streamlit-app/main/data/"
 
 # -------------------------------
-# 主区：选择并加载 CSV
+# 获取 data 文件夹下的文件列表
 # -------------------------------
-st.header("📁 Uploaded CSV Files")
+@st.cache_data(ttl=300)
+def list_github_files():
+    api_url = "https://api.github.com/repos/Hao0211/neo4j-streamlit-app/contents/data"
+    r = requests.get(api_url)
+    if r.status_code != 200:
+        st.error("❌ 无法从 GitHub 获取文件列表，请检查仓库名称或路径。")
+        return []
+    data = r.json()
+    csv_files = [item["name"] for item in data if item["name"].endswith(".csv")]
+    return sorted(csv_files, reverse=True)
 
-files = sorted([f.name for f in UPLOAD_DIR.glob("*.csv")], reverse=True)
+files = list_github_files()
+
+# -------------------------------
+# 文件选择
+# -------------------------------
+st.sidebar.header("📁 Select CSV from GitHub")
 if not files:
-    st.info("No CSV files available. Upload one from the sidebar to begin.")
+    st.sidebar.warning("GitHub /data 文件夹中没有 CSV 文件。请先上传文件到仓库。")
     st.stop()
 
-selected_filename = st.selectbox("Select an uploaded CSV to load", files, index=0)
-csv_path = UPLOAD_DIR / selected_filename
-
-# 尝试解析并显示部分内容
-try:
-    df = pd.read_csv(csv_path)
-except Exception as e:
-    st.error(f"Failed to read CSV: {e}")
-    st.stop()
-
-st.success(f"✅ Loaded: {selected_filename}")
-st.dataframe(df.head(8), use_container_width=True)
+selected_filename = st.sidebar.selectbox("Choose CSV file", files)
+csv_url = f"{GITHUB_RAW_BASE}{selected_filename}"
 
 # -------------------------------
-# 列名检查
+# 加载 CSV
+# -------------------------------
+@st.cache_data(ttl=300)
+def load_csv_from_github(url):
+    return pd.read_csv(url)
+
+try:
+    df = load_csv_from_github(csv_url)
+    st.success(f"✅ Loaded: {selected_filename}")
+    st.dataframe(df.head(8), use_container_width=True)
+except Exception as e:
+    st.error(f"读取 GitHub CSV 文件失败：{e}")
+    st.stop()
+
+# -------------------------------
+# 列名检测
 # -------------------------------
 col_map = {c.lower(): c for c in df.columns}
 def colname(*candidates):
@@ -106,7 +90,7 @@ if date_col:
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 
 # -------------------------------
-# Sidebar: Filters
+# Sidebar Filters
 # -------------------------------
 st.sidebar.header("🔍 Graph Filters")
 
@@ -171,25 +155,17 @@ for _, row in filtered.iterrows():
         net.add_node(to_user, label=to_user, size=20, color="#90EE90", font={"size": 22, "bold": True})
         nodes_added.add(to_user)
 
-    # 线条粗细根据金额变化
     edge_width = max(2, min(12, total_amt / 10000))
-    net.add_edge(
-        from_user,
-        to_user,
-        label=label,
-        title=f"{from_user} → {to_user}\n{label}",
-        color="rgba(80,80,80,0.85)",
-        width=edge_width
-    )
+    net.add_edge(from_user, to_user, label=label, title=f"{from_user} → {to_user}\n{label}", color="rgba(80,80,80,0.85)", width=edge_width)
 
 # 高亮 tracked_username
 net.add_node(selected_tracked, label=selected_tracked, size=35, color="#FFD700", font={"size": 26, "bold": True})
 
 # -------------------------------
-# ✅ 修正的安全输出方式（不写入文件）
+# 直接显示 HTML，不写文件
 # -------------------------------
 try:
-    html_str = net.generate_html()  # 直接生成 HTML 字符串
+    html_str = net.generate_html()
     st.components.v1.html(html_str, height=820, scrolling=True)
 except Exception as e:
     st.error(f"Graph rendering failed: {e}")
