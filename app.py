@@ -1,25 +1,20 @@
 import streamlit as st
 import pandas as pd
-import tempfile
-from pathlib import Path
-from pyvis.network import Network
 import requests
+from pyvis.network import Network
+import streamlit.components.v1 as components
 
-# =========================================================
-# 🔧 GitHub Repo 设定
-# =========================================================
+# ======================================================
+# ⚙️ GitHub Repo 配置
+# ======================================================
 GITHUB_USER = "Hao0211"
 GITHUB_REPO = "neo4j-streamlit-app"
-DATA_FOLDER = "data"     # 你在 GitHub 里存 CSV 的目录
+DATA_FOLDER = "data"
 BRANCH = "main"
-# =========================================================
 
-st.set_page_config(page_title="Transaction Graph Viewer", layout="wide")
-st.title("📊 Transaction Graph Viewer")
-
-# =========================================================
-# 📂 从 GitHub 读取 CSV 列表
-# =========================================================
+# ======================================================
+# 🔄 从 GitHub 获取文件列表与数据
+# ======================================================
 @st.cache_data(ttl=300)
 def list_github_files():
     """列出 GitHub data/ 目录下所有 CSV 文件"""
@@ -30,139 +25,82 @@ def list_github_files():
         return []
     return [item["name"] for item in r.json() if item["name"].endswith(".csv")]
 
-# =========================================================
-# 📥 从 GitHub 下载并载入 CSV
-# =========================================================
 @st.cache_data(ttl=300)
 def load_github_csv(filename):
     """从 GitHub raw 链接读取 CSV 内容"""
     raw_url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/{BRANCH}/{DATA_FOLDER}/{filename}"
-    df = pd.read_csv(raw_url)
-    return df
+    try:
+        df = pd.read_csv(raw_url)
+        return df
+    except Exception as e:
+        st.error(f"❌ 无法读取 CSV 文件: {e}")
+        return pd.DataFrame()
 
-# =========================================================
-# 🧭 文件选择
-# =========================================================
+# ======================================================
+# 🏠 Streamlit 主程序
+# ======================================================
+st.set_page_config(page_title="Neo4j Streamlit Graph", layout="wide")
+st.title("📊 Neo4j Streamlit Graph Viewer")
+
 files = list_github_files()
 if not files:
     st.warning("⚠️ 还没有上传 CSV 文件，请先在 GitHub 的 data 文件夹上传。")
     st.stop()
 
-selected_filename = st.selectbox("Select a CSV file to load", files, index=0)
-st.success(f"✅ Loaded: {selected_filename}")
+selected_file = st.selectbox("📂 选择要查看的 CSV 文件", files)
+st.write(f"✅ 当前选择：`{selected_file}`")
 
-df = load_github_csv(selected_filename)
-st.dataframe(df.head(8), use_container_width=True)
-
-# =========================================================
-# 🧩 列名自动匹配
-# =========================================================
-col_map = {c.lower(): c for c in df.columns}
-def colname(*candidates):
-    for c in candidates:
-        if c.lower() in col_map:
-            return col_map[c.lower()]
-    return None
-
-tracked_col = colname("tracked_username")
-from_col = colname("from_username")
-to_col = colname("to_username")
-total_amt_col = colname("total_amount_received")
-txn_count_col = colname("distinct_txn_count")
-level_col = colname("level")
-date_col = colname("last_received_at", "first_received_at", "date")
-
-required = [tracked_col, from_col, to_col, total_amt_col, txn_count_col, level_col]
-missing = [c for c, v in zip(
-    ["tracked_username","from_username","to_username","total_amount_received","distinct_txn_count","level"], 
-    required
-) if v is None]
-
-if missing:
-    st.error(f"❌ CSV 缺少必要栏位: {', '.join(missing)}")
+# 加载 CSV
+df = load_github_csv(selected_file)
+if df.empty:
+    st.warning("⚠️ CSV 文件为空或读取失败。")
     st.stop()
 
-if date_col:
-    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+st.subheader("📋 数据预览")
+st.dataframe(df.head(10), use_container_width=True)
 
-# =========================================================
-# 🎛️ Sidebar 筛选
-# =========================================================
-st.sidebar.header("🔍 Graph Filters")
+# ======================================================
+# 🕸️ 图形化视图（PyVis）
+# ======================================================
+st.header("🕸️ Transaction Graph Visualization")
 
-tracked_candidates = sorted(df[tracked_col].dropna().astype(str).unique().tolist())
-selected_tracked = st.sidebar.selectbox("Filter · tracked_username", tracked_candidates, index=0)
-
-if date_col and df[date_col].notna().any():
-    min_date = df[date_col].min().date()
-    max_date = df[date_col].max().date()
-    date_range = st.sidebar.date_input("Select date range", [min_date, max_date])
-    start_ts = pd.to_datetime(date_range[0])
-    end_ts = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1)
-    df = df[(df[date_col] >= start_ts) & (df[date_col] < end_ts)]
-
-filtered = df[df[tracked_col] == selected_tracked].copy()
-if filtered.empty:
-    st.warning("⚠️ 没有符合条件的数据。")
+# 检查是否有 Source / Target 字段
+required_cols = {"Source", "Target"}
+if not required_cols.issubset(df.columns):
+    st.error("❌ CSV 必须包含 'Source' 和 'Target' 字段。")
     st.stop()
 
-# =========================================================
-# 🎨 绘制 PyVis 图表
-# =========================================================
-st.markdown(
-    f"<h2 style='font-weight: 800; font-size: 28px;'>📈 Graph Visualization for <span style=\"color:#B8B8B8\">{selected_tracked}</span></h2>",
-    unsafe_allow_html=True
-)
+# 初始化网络图
+net = Network(height="650px", width="100%", bgcolor="#FFFFFF", directed=True)
 
-net = Network(height="800px", width="100%", bgcolor="#FFFFFF", directed=True)
-net.force_atlas_2based(
-    gravity=-100,
-    central_gravity=0.01,
-    spring_length=220,
-    spring_strength=0.03,
-    damping=0.6
-)
+# 添加节点与连线
+for _, row in df.iterrows():
+    source = str(row["Source"])
+    target = str(row["Target"])
+    amount = row["Amount"] if "Amount" in df.columns else None
 
-def fmt_amount(v):
-    try:
-        if abs(v - round(v)) < 1e-9:
-            return f"{int(round(v))}RP"
-        return f"{v:,.2f}RP"
-    except Exception:
-        return str(v)
+    net.add_node(source, label=source, color="#00AEEF")
+    net.add_node(target, label=target, color="#FF7F0E")
+    if amount:
+        net.add_edge(source, target, title=f"Amount: {amount}")
+    else:
+        net.add_edge(source, target, title="Transaction")
 
-filtered = filtered.sort_values(by=level_col)
-nodes_added = set()
+# 生成 HTML 内容（不写入文件）
+html_str = net.generate_html()
 
-for _, row in filtered.iterrows():
-    from_user = str(row[from_col])
-    to_user = str(row[to_col])
-    total_amt = float(row[total_amt_col]) if pd.notna(row[total_amt_col]) else 0.0
-    txn_count = int(row[txn_count_col]) if pd.notna(row[txn_count_col]) else 0
-    label = f"{fmt_amount(total_amt)} ({txn_count})"
+# 在 Streamlit 显示
+components.html(html_str, height=700, scrolling=True)
 
-    if from_user not in nodes_added:
-        net.add_node(from_user, label=from_user, size=20, color="#87CEFA", font={"size": 22, "bold": True})
-        nodes_added.add(from_user)
-    if to_user not in nodes_added:
-        net.add_node(to_user, label=to_user, size=20, color="#90EE90", font={"size": 22, "bold": True})
-        nodes_added.add(to_user)
+# ======================================================
+# ℹ️ 使用说明
+# ======================================================
+with st.expander("📘 使用说明"):
+    st.markdown("""
+    1. 打开 [你的 GitHub 仓库](https://github.com/Hao0211/neo4j-streamlit-app)
+    2. 创建一个文件夹 `data/`
+    3. 上传 CSV 文件（必须包含 `Source` 与 `Target` 两列，可选 `Amount`）
+    4. 回到此页面刷新，即可选择新文件并查看关系图 🌐
+    """)
 
-    edge_width = max(2, min(12, total_amt / 10000))
-    net.add_edge(
-        from_user,
-        to_user,
-        label=label,
-        title=f"{from_user} → {to_user}\n{label}",
-        color="rgba(80,80,80,0.85)",
-        width=edge_width
-    )
-
-# 高亮 tracked_username
-net.add_node(selected_tracked, label=selected_tracked, size=35, color="#FFD700", font={"size": 26, "bold": True})
-
-# 输出 HTML
-tmp_dir = tempfile.gettempdir()
-html_path = Path(tmp_dir) / "graph.html"
-net.write_html(html_path)
-st.components.v1.html(html_path.read_text(), height=820)
+st.success("✅ 应用已成功加载！可从 GitHub data 目录选择文件查看图表。")
