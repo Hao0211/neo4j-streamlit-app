@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-from pathlib import Path
+from bs4 import BeautifulSoup
 from pyvis.network import Network
 from datetime import datetime
 
@@ -12,23 +12,48 @@ st.set_page_config(page_title="Transaction Graph Viewer", layout="wide")
 st.title("📊 Transaction Graph Viewer")
 
 # -------------------------------
-# GitHub 仓库设置
+# GitHub 仓库基础路径
 # -------------------------------
-GITHUB_RAW_BASE = "https://raw.githubusercontent.com/Hao0211/neo4j-streamlit-app/main/data/"
+OWNER = "Hao0211"
+REPO = "neo4j-streamlit-app"
+GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{OWNER}/{REPO}/main/data/"
+GITHUB_API_URL = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/data"
+GITHUB_HTML_URL = f"https://github.com/{OWNER}/{REPO}/tree/main/data"
 
 # -------------------------------
-# 获取 data 文件夹下的文件列表
+# 获取 GitHub 文件列表（带 fallback）
 # -------------------------------
 @st.cache_data(ttl=300)
 def list_github_files():
-    api_url = "https://api.github.com/repos/Hao0211/neo4j-streamlit-app/contents/data"
-    r = requests.get(api_url)
-    if r.status_code != 200:
-        st.error("❌ 无法从 GitHub 获取文件列表，请检查仓库名称或路径。")
+    """优先使用 GitHub API，如失败则网页爬取 fallback"""
+    try:
+        r = requests.get(GITHUB_API_URL, timeout=8)
+        if r.status_code == 200:
+            data = r.json()
+            csv_files = [item["name"] for item in data if item["name"].endswith(".csv")]
+            if csv_files:
+                return sorted(csv_files, reverse=True)
+        # 否则进入 fallback
+        st.warning("⚠️ GitHub API 无法访问，尝试使用网页解析模式...")
+        return list_github_files_fallback()
+    except Exception as e:
+        st.warning(f"⚠️ GitHub API 访问失败：{e}，改用网页模式...")
+        return list_github_files_fallback()
+
+def list_github_files_fallback():
+    """网页爬取 /data 文件夹 CSV 文件名"""
+    try:
+        html = requests.get(GITHUB_HTML_URL, timeout=10).text
+        soup = BeautifulSoup(html, "html.parser")
+        files = [
+            a.text.strip()
+            for a in soup.select('a.js-navigation-open.Link--primary')
+            if a.text.strip().endswith(".csv")
+        ]
+        return sorted(files, reverse=True)
+    except Exception as e:
+        st.error(f"❌ 无法从 GitHub 获取文件列表（网页模式失败）：{e}")
         return []
-    data = r.json()
-    csv_files = [item["name"] for item in data if item["name"].endswith(".csv")]
-    return sorted(csv_files, reverse=True)
 
 files = list_github_files()
 
