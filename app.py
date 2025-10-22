@@ -1,196 +1,67 @@
 import streamlit as st
-import pandas as pd
 import requests
-from bs4 import BeautifulSoup
+import pandas as pd
 from pyvis.network import Network
-from datetime import datetime
+import os
 
-# -------------------------------
-# 页面配置
-# -------------------------------
-st.set_page_config(page_title="Transaction Graph Viewer", layout="wide")
-st.title("📊 Transaction Graph Viewer")
+# 安全导入 BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    st.error("缺少 BeautifulSoup4，请在 requirements.txt 中添加 beautifulsoup4 并重新部署。")
 
-# -------------------------------
-# GitHub 仓库基础路径
-# -------------------------------
-OWNER = "Hao0211"
-REPO = "neo4j-streamlit-app"
-GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{OWNER}/{REPO}/main/data/"
-GITHUB_API_URL = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/data"
-GITHUB_HTML_URL = f"https://github.com/{OWNER}/{REPO}/tree/main/data"
+# ----------------------------------------
+# 配置
+# ----------------------------------------
+GITHUB_USERNAME = "Hao0211"
+GITHUB_REPO = "neo4j-streamlit-app"
+BRANCH = "main"
 
-# -------------------------------
-# 获取 GitHub 文件列表（带 fallback）
-# -------------------------------
-@st.cache_data(ttl=300)
-def list_github_files():
-    """优先使用 GitHub API，如失败则网页爬取 fallback"""
+# ----------------------------------------
+# 获取仓库文件列表
+# ----------------------------------------
+def get_repo_files():
+    api_url = f"https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/contents/"
     try:
-        r = requests.get(GITHUB_API_URL, timeout=8)
-        if r.status_code == 200:
-            data = r.json()
-            csv_files = [item["name"] for item in data if item["name"].endswith(".csv")]
-            if csv_files:
-                return sorted(csv_files, reverse=True)
-        # 否则进入 fallback
+        response = requests.get(api_url)
+        if response.status_code == 200:
+            data = response.json()
+            return [item["name"] for item in data if item["type"] == "file"]
+        else:
+            raise Exception("GitHub API 无法访问")
+    except Exception as e:
         st.warning("⚠️ GitHub API 无法访问，尝试使用网页解析模式...")
-        return list_github_files_fallback()
-    except Exception as e:
-        st.warning(f"⚠️ GitHub API 访问失败：{e}，改用网页模式...")
-        return list_github_files_fallback()
+        html_url = f"https://github.com/{GITHUB_USERNAME}/{GITHUB_REPO}/tree/{BRANCH}"
+        response = requests.get(html_url)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            return [a.text.strip() for a in soup.select("a.js-navigation-open.Link--primary")]
+        else:
+            st.error("❌ 无法访问 GitHub 仓库网页，请检查网络或仓库设置。")
+            return []
 
-def list_github_files_fallback():
-    """网页爬取 /data 文件夹 CSV 文件名"""
-    try:
-        html = requests.get(GITHUB_HTML_URL, timeout=10).text
-        soup = BeautifulSoup(html, "html.parser")
-        files = [
-            a.text.strip()
-            for a in soup.select('a.js-navigation-open.Link--primary')
-            if a.text.strip().endswith(".csv")
-        ]
-        return sorted(files, reverse=True)
-    except Exception as e:
-        st.error(f"❌ 无法从 GitHub 获取文件列表（网页模式失败）：{e}")
-        return []
+# ----------------------------------------
+# 显示文件内容
+# ----------------------------------------
+def show_file_content(file_name):
+    file_url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO}/{BRANCH}/{file_name}"
+    response = requests.get(file_url)
+    if response.status_code == 200:
+        st.code(response.text, language="python")
+    else:
+        st.error(f"无法读取文件：{file_name}")
 
-files = list_github_files()
+# ----------------------------------------
+# Streamlit 页面布局
+# ----------------------------------------
+st.set_page_config(page_title="📈 GitHub 文件浏览器", layout="wide")
 
-# -------------------------------
-# 文件选择
-# -------------------------------
-st.sidebar.header("📁 Select CSV from GitHub")
-if not files:
-    st.sidebar.warning("GitHub /data 文件夹中没有 CSV 文件。请先上传文件到仓库。")
-    st.stop()
+st.title("📘 GitHub 文件可视化浏览器")
 
-selected_filename = st.sidebar.selectbox("Choose CSV file", files)
-csv_url = f"{GITHUB_RAW_BASE}{selected_filename}"
-
-# -------------------------------
-# 加载 CSV
-# -------------------------------
-@st.cache_data(ttl=300)
-def load_csv_from_github(url):
-    return pd.read_csv(url)
-
-try:
-    df = load_csv_from_github(csv_url)
-    st.success(f"✅ Loaded: {selected_filename}")
-    st.dataframe(df.head(8), use_container_width=True)
-except Exception as e:
-    st.error(f"读取 GitHub CSV 文件失败：{e}")
-    st.stop()
-
-# -------------------------------
-# 列名检测
-# -------------------------------
-col_map = {c.lower(): c for c in df.columns}
-def colname(*candidates):
-    for c in candidates:
-        if c.lower() in col_map:
-            return col_map[c.lower()]
-    return None
-
-tracked_col = colname("tracked_username")
-from_col = colname("from_username")
-to_col = colname("to_username")
-total_amt_col = colname("total_amount_received")
-txn_count_col = colname("distinct_txn_count")
-level_col = colname("level")
-date_col = colname("last_received_at", "first_received_at", "date")
-
-required = [tracked_col, from_col, to_col, total_amt_col, txn_count_col, level_col]
-missing = [c for c, v in zip(
-    ["tracked_username","from_username","to_username","total_amount_received","distinct_txn_count","level"], 
-    required
-) if v is None]
-
-if missing:
-    st.error(f"CSV missing required columns: {', '.join(missing)}.")
-    st.stop()
-
-if date_col:
-    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-
-# -------------------------------
-# Sidebar Filters
-# -------------------------------
-st.sidebar.header("🔍 Graph Filters")
-
-tracked_candidates = sorted(df[tracked_col].dropna().astype(str).unique().tolist())
-selected_tracked = st.sidebar.selectbox("Filter · tracked_username", tracked_candidates, index=0)
-
-if date_col and df[date_col].notna().any():
-    min_date = df[date_col].min().date()
-    max_date = df[date_col].max().date()
-    date_range = st.sidebar.date_input("Select date range", [min_date, max_date])
-    start_ts = pd.to_datetime(date_range[0])
-    end_ts = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1)
-    df = df[(df[date_col] >= start_ts) & (df[date_col] < end_ts)]
-
-# -------------------------------
-# 根据 tracked_username 过滤数据
-# -------------------------------
-filtered = df[df[tracked_col] == selected_tracked].copy()
-if filtered.empty:
-    st.warning("No data for selected tracked_username.")
-    st.stop()
-
-# -------------------------------
-# 绘制 PyVis 图表
-# -------------------------------
-st.markdown(
-    f"<h2 style='font-weight: 800; font-size: 28px;'>📈 Graph Visualization for <span style=\"color:#B8B8B8\">{selected_tracked}</span></h2>",
-    unsafe_allow_html=True
-)
-
-net = Network(height="800px", width="100%", bgcolor="#FFFFFF", directed=True)
-net.force_atlas_2based(
-    gravity=-100,
-    central_gravity=0.01,
-    spring_length=220,
-    spring_strength=0.03,
-    damping=0.6
-)
-
-def fmt_amount(v):
-    try:
-        if abs(v - round(v)) < 1e-9:
-            return f"{int(round(v))}RP"
-        return f"{v:,.2f}RP"
-    except Exception:
-        return str(v)
-
-filtered = filtered.sort_values(by=level_col)
-nodes_added = set()
-
-for _, row in filtered.iterrows():
-    from_user = str(row[from_col])
-    to_user = str(row[to_col])
-    total_amt = float(row[total_amt_col]) if pd.notna(row[total_amt_col]) else 0.0
-    txn_count = int(row[txn_count_col]) if pd.notna(row[txn_count_col]) else 0
-    label = f"{fmt_amount(total_amt)} ({txn_count})"
-
-    if from_user not in nodes_added:
-        net.add_node(from_user, label=from_user, size=20, color="#87CEFA", font={"size": 22, "bold": True})
-        nodes_added.add(from_user)
-    if to_user not in nodes_added:
-        net.add_node(to_user, label=to_user, size=20, color="#90EE90", font={"size": 22, "bold": True})
-        nodes_added.add(to_user)
-
-    edge_width = max(2, min(12, total_amt / 10000))
-    net.add_edge(from_user, to_user, label=label, title=f"{from_user} → {to_user}\n{label}", color="rgba(80,80,80,0.85)", width=edge_width)
-
-# 高亮 tracked_username
-net.add_node(selected_tracked, label=selected_tracked, size=35, color="#FFD700", font={"size": 26, "bold": True})
-
-# -------------------------------
-# 直接显示 HTML，不写文件
-# -------------------------------
-try:
-    html_str = net.generate_html()
-    st.components.v1.html(html_str, height=820, scrolling=True)
-except Exception as e:
-    st.error(f"Graph rendering failed: {e}")
+files = get_repo_files()
+if files:
+    selected_file = st.selectbox("选择要查看的文件：", files)
+    if selected_file:
+        show_file_content(selected_file)
+else:
+    st.error("未找到任何文件，请确认仓库名称和分支是否正确。")
