@@ -1,6 +1,7 @@
-streamlit
-pandas
-requests
-pyvis
-beautifulsoup4
+streamlit>=1.38
+pandas>=2.0
+requests>=2.31
+pyvis>=0.3
+beautifulsoup4>=4.12
+
 
